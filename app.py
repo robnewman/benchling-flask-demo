@@ -1,0 +1,70 @@
+from flask import Flask, request, jsonify
+import requests
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+app = Flask(__name__)
+
+# Configuration - loaded from .env file
+BENCHLING_API_KEY = os.environ.get('BENCHLING_API_KEY', 'your_api_key_here')
+BENCHLING_TENANT = os.environ.get('BENCHLING_TENANT', 'your-tenant')
+
+@app.route('/webhook', methods=['POST'])
+def webhook_handler():
+    """Handle incoming webhooks from Benchling"""
+    data = request.json
+    
+    print(f"Received webhook: {data.get('type')}")
+    
+    # Handle app installation
+    if data.get('type') == 'v2.app.installed':
+        canvas_id = data.get('canvasId')
+        if canvas_id:
+            update_canvas(canvas_id)
+    
+    return jsonify({"status": "ok"}), 200
+
+def update_canvas(canvas_id):
+    """Update the canvas with text and buttons"""
+    canvas_update = {
+        "blocks": [
+            {
+                "id": "welcome_text",
+                "type": "MARKDOWN",
+                "text": "### Welcome to My App\nThis is a simple homepage with text and buttons."
+            },
+            {
+                "id": "action_button",
+                "type": "BUTTON",
+                "text": "Click Me",
+                "enabled": True
+            }
+        ],
+        "enabled": True
+    }
+    
+    url = f"https://{BENCHLING_TENANT}.benchling.com/api/v2/app-canvases/{canvas_id}"
+    headers = {
+        "Authorization": f"Bearer {BENCHLING_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    response = requests.patch(url, json=canvas_update, headers=headers)
+    
+    if response.status_code == 200:
+        print(f"Canvas updated successfully: {canvas_id}")
+    else:
+        print(f"Failed to update canvas: {response.status_code} - {response.text}")
+    
+    return response
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({"status": "healthy"}), 200
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5001, debug=True)
