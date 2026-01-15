@@ -29,13 +29,23 @@ The app will run on `http://localhost:5000`
 
 ## AWS AppRunner Deployment
 
-### Option 1: Console (Recommended)
+### Step 1: Deploy to AppRunner
 1. Create AppRunner service from source code
 2. Go to **Configuration** → **Configure**
 3. Under **Environment variables**, add:
    - `BENCHLING_API_KEY` = your_api_key
    - `BENCHLING_TENANT` = your_tenant
-4. Deploy
+4. Deploy and note your AppRunner URL
+
+### Step 2: Register App in Benchling
+1. Update `manifest.yaml` with your AppRunner URL:
+   ```yaml
+   webhookUrl: https://your-apprunner-url.us-east-1.awsapprunner.com/webhook
+   ```
+2. In Benchling, go to **Settings** → **Developer Console**
+3. Create a new app using the manifest
+4. Install the app to your tenant
+5. Navigate to the app's homepage to see your canvas
 
 ### Option 2: Using apprunner.yaml
 The included `apprunner.yaml` configures the runtime. Set actual environment variables through the console (values in the file are placeholders).

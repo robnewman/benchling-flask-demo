@@ -1,0 +1,18 @@
+id: my-canvas-app
+name: My Canvas App
+description: Simple app with homepage canvas
+version: 1.0.0
+
+webhookUrl: https://your-apprunner-url.us-east-1.awsapprunner.com/webhook
+
+features:
+  - name: App Homepage Canvas
+    id: homepage_canvas
+    type: APP_HOMEPAGE
+
+subscriptions:
+  - type: v2.app.installed
+  - type: v2.button.clicked
+
+security:
+  webhookSecret: your-webhook-secret-here
