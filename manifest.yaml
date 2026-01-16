@@ -1,9 +1,10 @@
-id: my-canvas-app
-name: My Canvas App
-description: Simple app with homepage canvas
-version: 1.0.0
+manifestVersion: 1
 
-webhookUrl: https://your-apprunner-url.us-east-1.awsapprunner.com/webhook
+info:
+  name: Seqera Flask App
+  version: 0.0.1
+  description: Simple Seqera Flask app with homepage canvas
+
 
 features:
   - name: App Homepage Canvas
@@ -11,8 +12,7 @@ features:
     type: APP_HOMEPAGE
 
 subscriptions:
+  deliveryMethod: WEBHOOK
+  messages:
   - type: v2.app.installed
-  - type: v2.button.clicked
-
-security:
-  webhookSecret: your-webhook-secret-here
+  - type: v2.canvas.userInteracted

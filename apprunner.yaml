@@ -3,13 +3,15 @@ runtime: python3
 build:
   commands:
     build:
-      - pip install -r requirements.txt
+      - pip3 install --user -r requirements.txt
 run:
-  command: gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 app:app
+  command: /root/.local/bin/gunicorn -b 0.0.0.0:8080 app:app
   network:
     port: 8080
   env:
-    - name: BENCHLING_API_KEY
-      value: "placeholder_will_be_overridden"
+    - name: BENCHLING_CLIENT_ID
+      value: "provided_by_benchling"
+    - name: BENCHLING_CLIENT_SECRET
+      value: "generated_in_benchling"
     - name: BENCHLING_TENANT
       value: "placeholder_will_be_overridden"

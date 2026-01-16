@@ -9,7 +9,8 @@ load_dotenv()
 app = Flask(__name__)
 
 # Configuration - loaded from .env file
-BENCHLING_API_KEY = os.environ.get('BENCHLING_API_KEY', 'your_api_key_here')
+BENCHLING_CLIENT_ID = os.environ.get('BENCHLING_CLIENT_ID')
+BENCHLING_CLIENT_SECRET = os.environ.get('BENCHLING_CLIENT_SECRET')
 BENCHLING_TENANT = os.environ.get('BENCHLING_TENANT', 'your-tenant')
 
 @app.route('/webhook', methods=['POST'])
@@ -48,11 +49,16 @@ def update_canvas(canvas_id):
     
     url = f"https://{BENCHLING_TENANT}.benchling.com/api/v2/app-canvases/{canvas_id}"
     headers = {
-        "Authorization": f"Bearer {BENCHLING_API_KEY}",
         "Content-Type": "application/json"
     }
     
-    response = requests.patch(url, json=canvas_update, headers=headers)
+    # Use Basic Auth with CLIENT_ID and CLIENT_SECRET
+    response = requests.patch(
+        url, 
+        json=canvas_update, 
+        headers=headers,
+        auth=(BENCHLING_CLIENT_ID, BENCHLING_CLIENT_SECRET)
+    )
     
     if response.status_code == 200:
         print(f"Canvas updated successfully: {canvas_id}")
@@ -67,4 +73,4 @@ def health_check():
     return jsonify({"status": "healthy"}), 200
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
