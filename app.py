@@ -51,6 +51,30 @@ def lifecycle_webhook_handler():
     
     return jsonify({"status": "ok"}), 200
 
+@app.route('/webhook/canvas', methods=['POST'])
+def canvas_webhook_handler():
+    """Handle canvas webhooks from Benchling"""
+    data = request.json
+    
+    message_type = data.get('message', {}).get('type')
+    print(f"Received canvas webhook: {message_type}")
+    print(f"Full payload: {data}")
+    
+    # Handle canvas initialization
+    if message_type == 'v2.canvas.initialized':
+        canvas_id = data.get('canvas', {}).get('id')
+        if canvas_id:
+            print(f"Initializing canvas: {canvas_id}")
+            update_canvas(canvas_id)
+    
+    # Handle user interactions (button clicks)
+    if message_type == 'v2.canvas.userInteracted':
+        canvas_id = data.get('canvas', {}).get('id')
+        print(f"User interacted with canvas: {canvas_id}")
+        # Handle button click here
+    
+    return jsonify({"status": "ok"}), 200
+
 def update_canvas(canvas_id):
     """Update the canvas with text and buttons"""
     canvas_update = {
