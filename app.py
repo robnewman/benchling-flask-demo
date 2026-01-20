@@ -35,11 +35,19 @@ def lifecycle_webhook_handler():
     
     message_type = data.get('message', {}).get('type')
     print(f"Received lifecycle webhook: {message_type}")
+    print(f"Full payload: {data}")
     
     # Handle app installation
     if message_type == 'v2.app.installed':
         # App was installed - you can perform initialization here
         print(f"App installed in tenant: {data.get('tenantId')}")
+    
+    # Handle canvas initialization (when user visits app homepage)
+    if message_type == 'v2.canvas.initialized':
+        canvas_id = data.get('canvas', {}).get('id')
+        if canvas_id:
+            print(f"Initializing canvas: {canvas_id}")
+            update_canvas(canvas_id)
     
     return jsonify({"status": "ok"}), 200
 
