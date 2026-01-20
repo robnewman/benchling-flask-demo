@@ -1,7 +1,8 @@
 from flask import Flask, request, jsonify
-import requests
 import os
 from dotenv import load_dotenv
+from benchling_sdk.benchling import Benchling
+from benchling_sdk.auth.client_credentials_oauth2 import ClientCredentialsOAuth2
 
 # Load environment variables from .env file
 load_dotenv()
@@ -12,6 +13,15 @@ app = Flask(__name__)
 BENCHLING_CLIENT_ID = os.environ.get('BENCHLING_CLIENT_ID')
 BENCHLING_CLIENT_SECRET = os.environ.get('BENCHLING_CLIENT_SECRET')
 BENCHLING_TENANT = os.environ.get('BENCHLING_TENANT', 'your-tenant')
+
+# Initialize Benchling SDK client
+benchling = Benchling(
+    url=f"https://{BENCHLING_TENANT}.benchling.com",
+    auth_method=ClientCredentialsOAuth2(
+        client_id=BENCHLING_CLIENT_ID,
+        client_secret=BENCHLING_CLIENT_SECRET
+    )
+)
 
 @app.route('/webhook', methods=['POST'])
 def webhook_handler():
@@ -76,43 +86,35 @@ def canvas_webhook_handler():
     return jsonify({"status": "ok"}), 200
 
 def update_canvas(canvas_id):
-    """Update the canvas with text and buttons"""
-    canvas_update = {
-        "blocks": [
-            {
-                "id": "welcome_text",
-                "type": "MARKDOWN",
-                "text": "### Welcome to My App\nThis is a simple homepage with text and buttons."
-            },
-            {
-                "id": "action_button",
-                "type": "BUTTON",
-                "text": "Click Me",
-                "enabled": True
-            }
-        ],
-        "enabled": True
-    }
-    
-    url = f"https://{BENCHLING_TENANT}.benchling.com/api/v2/app-canvases/{canvas_id}"
-    headers = {
-        "Content-Type": "application/json"
-    }
-    
-    # Use Basic Auth with CLIENT_ID and CLIENT_SECRET
-    response = requests.patch(
-        url, 
-        json=canvas_update, 
-        headers=headers,
-        auth=(BENCHLING_CLIENT_ID, BENCHLING_CLIENT_SECRET)
+    """Update the canvas with text and buttons using Benchling SDK"""
+    from benchling_sdk.models import (
+        AppCanvasUpdate,
+        MarkdownUiBlock,
+        ButtonUiBlock
     )
     
-    if response.status_code == 200:
-        print(f"Canvas updated successfully: {canvas_id}")
-    else:
-        print(f"Failed to update canvas: {response.status_code} - {response.text}")
+    canvas_update = AppCanvasUpdate(
+        blocks=[
+            MarkdownUiBlock(
+                id="welcome_text",
+                text="### Welcome to My App\nThis is a simple homepage with text and buttons."
+            ),
+            ButtonUiBlock(
+                id="action_button",
+                text="Click Me",
+                enabled=True
+            )
+        ],
+        enabled=True
+    )
     
-    return response
+    try:
+        updated_canvas = benchling.apps.update_canvas(canvas_id, canvas_update)
+        print(f"Canvas updated successfully: {canvas_id}")
+        return updated_canvas
+    except Exception as e:
+        print(f"Failed to update canvas: {e}")
+        return None
 
 @app.route('/health', methods=['GET'])
 def health_check():
