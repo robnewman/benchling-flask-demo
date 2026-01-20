@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 import os
 from dotenv import load_dotenv
-from benchling_sdk.benchling import Benchling
+from benchling_sdk import Benchling
 from benchling_sdk.auth.client_credentials_oauth2 import ClientCredentialsOAuth2
 
 # Load environment variables from .env file
