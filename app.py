@@ -28,6 +28,21 @@ def webhook_handler():
     
     return jsonify({"status": "ok"}), 200
 
+@app.route('/webhook/lifecycle', methods=['POST'])
+def lifecycle_webhook_handler():
+    """Handle app lifecycle webhooks from Benchling"""
+    data = request.json
+    
+    message_type = data.get('message', {}).get('type')
+    print(f"Received lifecycle webhook: {message_type}")
+    
+    # Handle app installation
+    if message_type == 'v2.app.installed':
+        # App was installed - you can perform initialization here
+        print(f"App installed in tenant: {data.get('tenantId')}")
+    
+    return jsonify({"status": "ok"}), 200
+
 def update_canvas(canvas_id):
     """Update the canvas with text and buttons"""
     canvas_update = {
