@@ -17,7 +17,7 @@ BENCHLING_TENANT = os.environ.get('BENCHLING_TENANT', 'your-tenant')
 # Initialize Benchling SDK client
 benchling = Benchling(
     url=f"https://{BENCHLING_TENANT}.benchling.com",
-    auth_method=ClientCredentialsOAuth2(
+    auth=ClientCredentialsOAuth2(
         client_id=BENCHLING_CLIENT_ID,
         client_secret=BENCHLING_CLIENT_SECRET
     )
