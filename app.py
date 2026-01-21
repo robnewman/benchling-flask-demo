@@ -7,6 +7,7 @@ from benchling_sdk.auth.client_credentials_oauth2 import ClientCredentialsOAuth2
 # Load environment variables from .env file
 load_dotenv()
 
+# Force redeploy
 app = Flask(__name__)
 
 # Configuration - loaded from .env file
