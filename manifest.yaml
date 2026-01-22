@@ -1,19 +1,21 @@
 manifestVersion: 1
-
 info:
   name: Seqera Flask App
-  version: 0.0.2
   description: Simple Seqera Flask app with homepage canvas
-
-
+  version: 0.0.3
 features:
-  - name: App Homepage Canvas
-    id: homepage_canvas
-    type: APP_HOMEPAGE
-
+  - name: Seqera Connector
+    id: seqera_entry
+    type: CANVAS
 subscriptions:
   deliveryMethod: WEBHOOK
+  # `app` events go to /lifecycle
+  # `canvas` events go to /canvas (including interactions)
+  # All other events go to /event
   messages:
   - type: v2.app.installed
+  - type: v2.canvas.created # user clicks "Add"
+  - type: v2.entry.created # new notebook created
   - type: v2.canvas.initialized
   - type: v2.canvas.userInteracted
+  - type: v2.entry.updated.fields
