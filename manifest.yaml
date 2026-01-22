@@ -15,7 +15,5 @@ subscriptions:
   messages:
   - type: v2.app.installed
   - type: v2.canvas.created # user clicks "Add"
-  - type: v2.entry.created # new notebook created
   - type: v2.canvas.initialized
   - type: v2.canvas.userInteracted
-  - type: v2.entry.updated.fields
