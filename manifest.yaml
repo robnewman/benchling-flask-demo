@@ -1,10 +1,10 @@
 manifestVersion: 1
 info:
-  name: Seqera Flask App
-  description: Simple Seqera Flask app with homepage canvas
-  version: 0.0.3
+  name: Seqera Platform Integration
+  description: Simple Seqera Platform integration via canvas
+  version: 0.0.4
 features:
-  - name: Seqera Connector
+  - name: Seqera Workflow Run Selector
     id: seqera_entry
     type: CANVAS
 subscriptions:
