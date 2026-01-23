@@ -22,11 +22,11 @@ configuration:
     type: text
     description: Seqera Platform workspace ID to use (optional if using org/workspace names)
     requiredConfig: true
-  - name: Seqera Platform Token
+  - name: seqera_platform_token
     type: text
     description: Valid Seqera Platform token
     requiredConfig: true
-  - name: Seqera API endpoint
+  - name: seqera_api_endpoint
     type: text
     description: Valid API endpoint URL
     requiredConfig: true
