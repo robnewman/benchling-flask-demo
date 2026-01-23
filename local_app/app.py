@@ -7,9 +7,11 @@ from local_app.benchling_app.handler import handle_webhook
 from local_app.benchling_app.setup import app_definition_id
 from local_app.lib.logger import get_logger
 
+from dotenv import load_dotenv
+
 logger = get_logger()
 
-# Load environment variables from .env file
+# Load environment variables from .env file (for local deployment)
 load_dotenv()
 
 def create_app() -> Flask:

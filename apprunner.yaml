@@ -17,3 +17,5 @@ run:
       value: "placeholder_will_be_overridden"
     - name: BENCHLING_APP_DEFINITION_ID
       value: "placeholder_will_be_overriden"
+    - name: BENCHLING_APP_LOG_LEVEL
+      value: "DEBUG"
