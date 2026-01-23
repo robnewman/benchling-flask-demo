@@ -15,3 +15,5 @@ run:
       value: "generated_in_benchling"
     - name: BENCHLING_TENANT
       value: "placeholder_will_be_overridden"
+    - name: BENCHLING_APP_DEFINITION_ID
+      value: "placeholder_will_be_overriden"

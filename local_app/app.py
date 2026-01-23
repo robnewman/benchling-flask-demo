@@ -1,130 +1,47 @@
-from flask import Flask, request
-import os
+from threading import Thread
 
 from benchling_sdk.apps.helpers.webhook_helpers import verify
+from flask import Flask, request
 
+from local_app.benchling_app.handler import handle_webhook
+from local_app.benchling_app.setup import app_definition_id
+from local_app.lib.logger import get_logger
 
-from dotenv import load_dotenv
-from benchling_sdk.benchling import Benchling
-from benchling_sdk.auth.client_credentials_oauth2 import ClientCredentialsOAuth2
+logger = get_logger()
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Force redeploy
-app = Flask(__name__)
+def create_app() -> Flask:
+    app = Flask(__name__)
 
-# Configuration - loaded from .env file
-BENCHLING_CLIENT_ID = os.environ.get('BENCHLING_CLIENT_ID')
-BENCHLING_CLIENT_SECRET = os.environ.get('BENCHLING_CLIENT_SECRET')
-BENCHLING_TENANT = os.environ.get('BENCHLING_TENANT', 'your-tenant')
+    @app.route("/health")
+    def health_check() -> tuple[str, int]:
+        """Health check endpoint"""
+        return "OK", 200
 
-# Initialize Benchling SDK client
-benchling = Benchling(
-    url=f"https://{BENCHLING_TENANT}.benchling.com",
-    auth_method=ClientCredentialsOAuth2(
-        client_id=BENCHLING_CLIENT_ID,
-        client_secret=BENCHLING_CLIENT_SECRET
+    @app.route("/1/webhooks/<path:target>", methods=["POST"])
+    def receive_webhooks(target: str) -> tuple[str, int]:  # noqa: ARG001
+        # For security, don't do anything else without first verifying the webhook
+        app_def_id = app_definition_id()
+
+        # Important! To verify webhooks, we need to pass the body as an unmodified string
+        # Flask's request.data is bytes, so decode to string. Passing bytes or JSON won't work
+        verify(app_def_id, request.data.decode("utf-8"), request.headers)
+
+        logger.debug("Received webhook message: %s", request.json)
+        # Dispatch work and ACK webhook as quickly as possible
+        _enqueue_work()
+        # ACK webhook by returning 2xx status code so Benchling knows the app received the signal
+        return "OK", 200
+
+    return app
+
+def _enqueue_work() -> None:
+    # PRODUCTION NOTE: A high volume of webhooks may spawn too many threads and lead to processing failures
+    # In production, we recommend a more robust queueing system for scale
+    thread = Thread(
+        target=handle_webhook,
+        args=(request.json,),
     )
-)
-
-@app.route('/webhook', methods=['POST'])
-def webhook_handler():
-    """Handle incoming webhooks from Benchling"""
-    data = request.json
-    
-    print(f"Received webhook: {data.get('type')}")
-    
-    # Handle app installation
-    if data.get('type') == 'v2.app.installed':
-        canvas_id = data.get('canvasId')
-        if canvas_id:
-            update_canvas(canvas_id)
-    
-    return jsonify({"status": "ok"}), 200
-
-@app.route('/webhook/lifecycle', methods=['POST'])
-def lifecycle_webhook_handler():
-    """Handle app lifecycle webhooks from Benchling"""
-    data = request.json
-    
-    message_type = data.get('message', {}).get('type')
-    print(f"Received lifecycle webhook: {message_type}")
-    print(f"Full payload: {data}")
-    
-    # Handle app installation
-    if message_type == 'v2.app.installed':
-        # App was installed - you can perform initialization here
-        print(f"App installed in tenant: {data.get('tenantId')}")
-    
-    # Handle canvas initialization (when user visits app homepage)
-    if message_type == 'v2.canvas.initialized':
-        canvas_id = data.get('canvas', {}).get('id')
-        if canvas_id:
-            print(f"Initializing canvas: {canvas_id}")
-            update_canvas(canvas_id)
-    
-    return jsonify({"status": "ok"}), 200
-
-@app.route('/webhook/canvas', methods=['POST'])
-def canvas_webhook_handler():
-    """Handle canvas webhooks from Benchling"""
-    data = request.json
-    
-    message_type = data.get('message', {}).get('type')
-    print(f"Received canvas webhook: {message_type}")
-    print(f"Full payload: {data}")
-    
-    # Handle canvas initialization
-    if message_type == 'v2.canvas.initialized':
-        canvas_id = data.get('canvas', {}).get('id')
-        if canvas_id:
-            print(f"Initializing canvas: {canvas_id}")
-            update_canvas(canvas_id)
-    
-    # Handle user interactions (button clicks)
-    if message_type == 'v2.canvas.userInteracted':
-        canvas_id = data.get('canvas', {}).get('id')
-        print(f"User interacted with canvas: {canvas_id}")
-        # Handle button click here
-    
-    return jsonify({"status": "ok"}), 200
-
-def update_canvas(canvas_id):
-    """Update the canvas with text and buttons using Benchling SDK"""
-    from benchling_sdk.models import (
-        AppCanvasUpdate,
-        MarkdownUiBlock,
-        ButtonUiBlock
-    )
-    
-    canvas_update = AppCanvasUpdate(
-        blocks=[
-            MarkdownUiBlock(
-                id="welcome_text",
-                text="### Welcome to My App\nThis is a simple homepage with text and buttons."
-            ),
-            ButtonUiBlock(
-                id="action_button",
-                text="Click Me",
-                enabled=True
-            )
-        ],
-        enabled=True
-    )
-    
-    try:
-        updated_canvas = benchling.apps.update_canvas(canvas_id, canvas_update)
-        print(f"Canvas updated successfully: {canvas_id}")
-        return updated_canvas
-    except Exception as e:
-        print(f"Failed to update canvas: {e}")
-        return None
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    """Health check endpoint"""
-    return jsonify({"status": "healthy"}), 200
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    thread.start()
