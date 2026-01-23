@@ -3,7 +3,7 @@ runtime: docker
 build:
   commands:
     build:
-      - docker build -t myapp
+      - docker build -t myapp .
 run:
   command: python3 -m gunicorn local_app.app:app --bind 0.0.0.0:8080
   network:
