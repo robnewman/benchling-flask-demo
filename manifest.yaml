@@ -2,7 +2,7 @@ manifestVersion: 1
 info:
   name: Seqera Platform Integration
   description: Simple Seqera Platform integration via canvas
-  version: 0.0.8
+  version: 0.0.9
 features:
   - name: Seqera Workflow Run Selector
     id: seqera_entry
@@ -26,9 +26,9 @@ configuration:
     type: text
     description: Seqera workspace name
     requiredConfig: true
-  - name: seqeraLicenseKey
+  - name: NXF_XPACK_LICENSE
     type: text
-    description: Seqera license key
+    description: Nextflow XPACK license key
     requiredConfig: true
   - name: seqeraPlatformToken
     type: text
