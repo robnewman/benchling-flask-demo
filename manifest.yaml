@@ -2,7 +2,7 @@ manifestVersion: 1
 info:
   name: Seqera Platform Integration
   description: Simple Seqera Platform integration via canvas
-  version: 0.0.6
+  version: 0.0.8
 features:
   - name: Seqera Workflow Run Selector
     id: seqera_entry
@@ -18,15 +18,23 @@ subscriptions:
   - type: v2.canvas.initialized
   - type: v2.canvas.userInteracted
 configuration:
-  - name: workspaceId
+  - name: organizationName
     type: text
-    description: Seqera Platform workspace ID to use (optional if using org/workspace names)
+    description: Seqera organization name
     requiredConfig: true
-  - name: seqera_platform_token
+  - name: workspaceName
     type: text
-    description: Valid Seqera Platform token
+    description: Seqera workspace name
     requiredConfig: true
-  - name: seqera_api_endpoint
+  - name: seqeraLicenseKey
     type: text
-    description: Valid API endpoint URL
+    description: Seqera license key
+    requiredConfig: true
+  - name: seqeraPlatformToken
+    type: text
+    description: Seqera token
+    requiredConfig: true
+  - name: seqeraApiEndpoint
+    type: text
+    description: Seqera API endpoint URL
     requiredConfig: true
