@@ -2,7 +2,7 @@ manifestVersion: 1
 info:
   name: Seqera Platform Integration
   description: Simple Seqera Platform integration via canvas
-  version: 0.0.9
+  version: 0.0.11
 features:
   - name: Seqera Workflow Run Selector
     id: seqera_entry
@@ -18,6 +18,10 @@ subscriptions:
   - type: v2.canvas.initialized
   - type: v2.canvas.userInteracted
 configuration:
+  - name: syncFolder
+    type: folder
+    description: The folder where synced pipeline runs will be stored
+    requiredConfig: true 
   - name: organizationName
     type: text
     description: Seqera organization name
@@ -38,3 +42,29 @@ configuration:
     type: text
     description: Seqera API endpoint URL
     requiredConfig: true
+  - name: workflowSchema
+    type: entry_schema
+    description: A Nextflow workflow schema 
+    requiredConfig: true
+    fieldDefinitions:
+      - name: workflowId
+        type: text
+        requiredConfig: true
+      - name: runName
+        type: text
+        requiredConfig: true
+      - name: status
+        type: dropdown
+        requiredConfig: true
+      - name: projectName
+        type: text
+        requiredConfig: true
+      - name: startTime
+        type: datetime
+        requiredConfig: true
+      - name: ownerId
+        type: text
+        requiredConfig: true
+      - name: labels
+        type: text
+        requiredConfig: true

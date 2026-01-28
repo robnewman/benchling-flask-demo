@@ -15,7 +15,7 @@ logger = get_logger()
 load_dotenv()
 
 def create_app() -> Flask:
-    app = Flask(__name__)
+    app = Flask("seqera-integration-app")
 
     @app.route("/health")
     def health_check() -> tuple[str, int]:
@@ -47,3 +47,9 @@ def _enqueue_work() -> None:
         args=(request.json,),
     )
     thread.start()
+
+# At the bottom of the file, after create_app() definition
+app = create_app()
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)

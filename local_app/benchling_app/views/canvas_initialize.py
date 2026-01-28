@@ -40,17 +40,17 @@ def input_blocks() -> list[UiBlock]:
         MarkdownUiBlock(
             id="top_instructions",
             type=MarkdownUiBlockType.MARKDOWN,
-            value="Enter a chemical name to search. For example, _'aspirin'_",
+            value="Enter a run to search for. For example, _'rnaseq'_",
         ),
         TextInputUiBlock(
             id=SEARCH_TEXT_ID,
             type=TextInputUiBlockType.TEXT_INPUT,
-            placeholder="Chemical name to search...",
+            placeholder="Run to search for...",
             value="",
         ),
         ButtonUiBlock(
             id=SEARCH_BUTTON_ID,
-            text="Search Chemicals",
+            text="Search runs",
             type=ButtonUiBlockType.BUTTON,
         ),
     ]

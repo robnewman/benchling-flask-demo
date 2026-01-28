@@ -1,27 +1,27 @@
 """
 Functions for interacting with Seqera Platform API
 """
-import os
 from typing import Optional
 
 import requests
 from benchling_sdk.apps.framework import App
-from benchling_sdk.apps.types import ManifestMessageCreate, ManifestMessageKind
-from benchling_sdk.helpers.serialization_helpers import fields
+from benchling_sdk.apps.status.errors import AppUserFacingError
 
 
-def get_seqera_config(app: App) -> tuple[Optional[str], Optional[str], Optional[str]]:
+def get_seqera_config(app: App) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
     """
     Get Seqera Platform configuration from app config.
     
     Returns:
-        Tuple of (api_endpoint, platform_token, workspace_id)
+        Tuple of (api_endpoint, platform_token, organization_name, workspace_name, nxf_xpack_license)
     """
-    seqera_endpoint = app.app_config_item("seqera_api_endpoint")
-    seqera_token = app.app_config_item("seqera_platform_token")
-    workspace_id = app.app_config_item("workspaceId")
+    seqera_endpoint = app.app_config_item("seqeraApiEndpoint")
+    seqera_token = app.app_config_item("seqeraPlatformToken")
+    organization_name = app.app_config_item("organizationName")
+    workspace_name = app.app_config_item("workspaceName")
+    nxf_xpack_license = app.app_config_item("NXF_XPACK_LICENSE")
     
-    return seqera_endpoint, seqera_token, workspace_id
+    return seqera_endpoint, seqera_token, organization_name, workspace_name, nxf_xpack_license
 
 
 def get_pipeline_runs(app: App, workspace_id: Optional[str] = None) -> list[dict]:
@@ -30,24 +30,19 @@ def get_pipeline_runs(app: App, workspace_id: Optional[str] = None) -> list[dict
     
     Args:
         app: Benchling App instance
-        workspace_id: Optional workspace ID to filter runs (overrides config)
+        workspace_id: Optional workspace ID to filter runs
         
     Returns:
         List of pipeline run dictionaries with 'id', 'runName', 'workflowId', 'status'
     """
-    seqera_endpoint, seqera_token, config_workspace_id = get_seqera_config(app)
+    seqera_endpoint, seqera_token, organization_name, workspace_name, nxf_xpack_license = get_seqera_config(app)
     
     if not seqera_endpoint or not seqera_token:
-        app.messages.create(
-            ManifestMessageCreate(
-                message="Seqera Platform configuration is missing. Please configure 'Seqera API endpoint' and 'Seqera Platform token' in app settings.",
-                kind=ManifestMessageKind.ERROR,
-            )
+        raise AppUserFacingError(
+            "Seqera Platform configuration is missing. Please configure 'seqeraApiEndpoint' and 'seqeraPlatformToken' in app settings."
         )
-        return []
     
-    # Use provided workspace_id if given, otherwise use config value
-    workspace_id = workspace_id or config_workspace_id
+    # Note: nxf_xpack_license available for future use if needed
     
     try:
         # Construct the API URL
@@ -57,6 +52,10 @@ def get_pipeline_runs(app: App, workspace_id: Optional[str] = None) -> list[dict
         params = {}
         if workspace_id:
             params["workspaceId"] = workspace_id
+        elif organization_name and workspace_name:
+            # Construct workspace ID from org and workspace names
+            # Format depends on Seqera API - adjust as needed
+            params["workspaceId"] = f"{organization_name}/{workspace_name}"
         
         # Make the API request
         headers = {
@@ -92,21 +91,9 @@ def get_pipeline_runs(app: App, workspace_id: Optional[str] = None) -> list[dict
         return pipeline_runs
         
     except requests.exceptions.RequestException as e:
-        app.messages.create(
-            ManifestMessageCreate(
-                message=f"Failed to fetch pipeline runs from Seqera Platform: {str(e)}",
-                kind=ManifestMessageKind.ERROR,
-            )
-        )
-        return []
+        raise AppUserFacingError(f"Failed to fetch pipeline runs from Seqera Platform: {str(e)}")
     except Exception as e:
-        app.messages.create(
-            ManifestMessageCreate(
-                message=f"Unexpected error fetching pipeline runs: {str(e)}",
-                kind=ManifestMessageKind.ERROR,
-            )
-        )
-        return []
+        raise AppUserFacingError(f"Unexpected error fetching pipeline runs: {str(e)}")
 
 
 def format_pipeline_runs_for_dropdown(pipeline_runs: list[dict]) -> list[dict]:
@@ -145,7 +132,7 @@ def get_pipeline_run_details(app: App, run_id: str) -> Optional[dict]:
     Returns:
         Dictionary with pipeline run details or None if not found
     """
-    seqera_endpoint, seqera_token, _ = get_seqera_config(app)
+    seqera_endpoint, seqera_token, _, _, _ = get_seqera_config(app)
     
     if not seqera_endpoint or not seqera_token:
         return None
@@ -164,10 +151,4 @@ def get_pipeline_run_details(app: App, run_id: str) -> Optional[dict]:
         return response.json()
         
     except requests.exceptions.RequestException as e:
-        app.messages.create(
-            ManifestMessageCreate(
-                message=f"Failed to fetch pipeline run details: {str(e)}",
-                kind=ManifestMessageKind.ERROR,
-            )
-        )
-        return None
+        raise AppUserFacingError(f"Failed to fetch pipeline run details: {str(e)}")
