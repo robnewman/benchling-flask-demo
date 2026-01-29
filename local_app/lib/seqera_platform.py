@@ -11,17 +11,75 @@ from benchling_sdk.apps.status.errors import AppUserFacingError
 def get_seqera_config(app: App) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
     """
     Get Seqera Platform configuration from app config.
-    
+
     Returns:
         Tuple of (api_endpoint, platform_token, organization_name, workspace_name, nxf_xpack_license)
     """
-    seqera_endpoint = app.app_config_item("seqeraApiEndpoint")
-    seqera_token = app.app_config_item("seqeraPlatformToken")
-    organization_name = app.app_config_item("organizationName")
-    workspace_name = app.app_config_item("workspaceName")
-    nxf_xpack_license = app.app_config_item("NXF_XPACK_LICENSE")
-    
+    seqera_endpoint = app.config_store.config_by_path(["seqeraApiEndpoint"]).value()
+    seqera_token = app.config_store.config_by_path(["seqeraPlatformToken"]).value()
+    organization_name = app.config_store.config_by_path(["organizationName"]).value()
+    workspace_name = app.config_store.config_by_path(["workspaceName"]).value()
+    nxf_xpack_license = app.config_store.config_by_path(["NXF_XPACK_LICENSE"]).value()
+
     return seqera_endpoint, seqera_token, organization_name, workspace_name, nxf_xpack_license
+
+
+def get_org_and_workspace_ids(app: App, organization_name: str, workspace_name: str) -> tuple[Optional[str], Optional[str]]:
+    """
+    Get the organization ID and workspace ID from their names.
+
+    Args:
+        app: Benchling App instance
+        organization_name: Name of the organization
+        workspace_name: Name of the workspace
+
+    Returns:
+        Tuple of (organization_id, workspace_id) or (None, None) if not found
+    """
+    seqera_endpoint, seqera_token, _, _, _ = get_seqera_config(app)
+
+    if not seqera_endpoint or not seqera_token:
+        return None, None
+
+    try:
+        # First, get the user ID from user-info
+        user_info_url = f"{seqera_endpoint.rstrip('/')}/user-info"
+
+        headers = {
+            "Authorization": f"Bearer {seqera_token}",
+            "Accept": "application/json"
+        }
+
+        response = requests.get(user_info_url, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        user_info = response.json()
+        user_id = user_info.get("user", {}).get("id")
+
+        if not user_id:
+            raise AppUserFacingError("Could not retrieve user ID from user-info")
+
+        # Now get all orgs and workspaces the user has access to
+        workspaces_url = f"{seqera_endpoint.rstrip('/')}/user/{user_id}/workspaces"
+
+        response = requests.get(workspaces_url, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+
+        # Loop through orgsAndWorkspaces to find matching org and workspace names
+        orgs_and_workspaces = data.get("orgsAndWorkspaces", [])
+        for item in orgs_and_workspaces:
+            if (item.get("orgName") == organization_name and
+                item.get("workspaceName") == workspace_name):
+                org_id = str(item.get("orgId"))
+                workspace_id = str(item.get("workspaceId"))
+                return org_id, workspace_id
+
+        return None, None
+
+    except requests.exceptions.RequestException as e:
+        raise AppUserFacingError(f"Failed to fetch organization and workspace IDs: {str(e)}")
 
 
 def get_pipeline_runs(app: App, workspace_id: Optional[str] = None) -> list[dict]:
@@ -48,14 +106,18 @@ def get_pipeline_runs(app: App, workspace_id: Optional[str] = None) -> list[dict
         # Construct the API URL
         url = f"{seqera_endpoint.rstrip('/')}/workflow"
         
+        # Resolve workspace ID if not provided
+        if not workspace_id and organization_name and workspace_name:
+            org_id, workspace_id = get_org_and_workspace_ids(app, organization_name, workspace_name)
+            if not workspace_id:
+                raise AppUserFacingError(
+                    f"Could not find workspace '{workspace_name}' in organization '{organization_name}'"
+                )
+
         # Add workspace filter if available
         params = {}
         if workspace_id:
             params["workspaceId"] = workspace_id
-        elif organization_name and workspace_name:
-            # Construct workspace ID from org and workspace names
-            # Format depends on Seqera API - adjust as needed
-            params["workspaceId"] = f"{organization_name}/{workspace_name}"
         
         # Make the API request
         headers = {
@@ -68,26 +130,30 @@ def get_pipeline_runs(app: App, workspace_id: Optional[str] = None) -> list[dict
         
         # Parse the response
         data = response.json()
-        
+
         # Extract workflow runs from response
-        # Adjust based on actual Seqera API response structure
+        # The Seqera API returns a "workflows" array
         if "workflows" in data:
             runs = data["workflows"]
         else:
             runs = data if isinstance(data, list) else []
-        
-        # Transform to dropdown-friendly format
+
+        # Transform to standard format
         pipeline_runs = []
         for run in runs:
+            workflow = run.get("workflow", {})
+            # Extract fields from the workflow object
             pipeline_runs.append({
-                "id": run.get("id", ""),
-                "runName": run.get("runName", run.get("id", "Unknown")),
-                "workflowId": run.get("workflowId", ""),
-                "status": run.get("status", ""),
-                "projectName": run.get("projectName", ""),
-                "start": run.get("start", ""),
+                "id": workflow.get("id", ""),
+                "workflowId": workflow.get("id", ""),
+                "runName": workflow.get("runName", "Unknown"),
+                "status": workflow.get("status", ""),
+                "projectName": workflow.get("projectName", ""),
+                "startTime": workflow.get("start", ""),
+                "userName": workflow.get("userName", workflow.get("owner", {}).get("userName", "")),
+                "labels": run.get("labels", ""),
             })
-        
+
         return pipeline_runs
         
     except requests.exceptions.RequestException as e:
