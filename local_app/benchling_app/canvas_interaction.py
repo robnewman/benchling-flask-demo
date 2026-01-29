@@ -11,10 +11,10 @@ from local_app.lib.seqera_platform import (
     format_pipeline_runs_for_dropdown,
     get_pipeline_run_details
 )
-
-# Field ID constants
-GET_WORKFLOWS_BUTTON_ID = "get_workflows_button"
-WORKFLOW_DROPDOWN_ID = "workflow_dropdown"
+from local_app.benchling_app.views.constants import (
+    GET_WORKFLOWS_BUTTON_ID,
+    WORKFLOW_DROPDOWN_ID
+)
 
 
 def route_interaction_webhook(

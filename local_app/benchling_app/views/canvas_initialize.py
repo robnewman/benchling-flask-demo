@@ -14,7 +14,7 @@ from benchling_sdk.models.webhooks.v0 import (
     CanvasInitializeWebhookV2,
 )
 
-from local_app.benchling_app.views.constants import SEARCH_BUTTON_ID, SEARCH_TEXT_ID
+from local_app.benchling_app.views.constants import GET_WORKFLOWS_BUTTON_ID, SEARCH_TEXT_ID
 
 
 def render_search_canvas(app: App, canvas_initialized: CanvasInitializeWebhookV2) -> None:
@@ -49,7 +49,7 @@ def input_blocks() -> list[UiBlock]:
             value="",
         ),
         ButtonUiBlock(
-            id=SEARCH_BUTTON_ID,
+            id=GET_WORKFLOWS_BUTTON_ID,
             text="Search runs",
             type=ButtonUiBlockType.BUTTON,
         ),
