@@ -18,11 +18,82 @@ from benchling_sdk.models import (
 from local_app.benchling_app.views.canvas_initialize import input_blocks
 from local_app.benchling_app.views.constants import (
     CANCEL_BUTTON_ID,
-    CID_KEY,
+    WID_KEY,
     CREATE_BUTTON_ID,
     SEARCH_TEXT_ID,
+    GET_PIPELINE_RUN_BUTTON_ID,
+    CANCEL_DETAIL_BUTTON_ID,
 )
 from local_app.lib.pub_chem import image_url
+
+
+def render_runs_list_canvas(
+    runs: list[dict[str, Any]],
+    canvas_builder: CanvasBuilder,
+) -> CanvasBuilder:
+    """
+    Render a list of pipeline runs with View Details buttons.
+
+    Args:
+        runs: List of pipeline run dictionaries
+        canvas_builder: CanvasBuilder to add blocks to
+
+    Returns:
+        Updated CanvasBuilder with runs list
+    """
+    # Add header
+    canvas_builder.blocks.append([
+        MarkdownUiBlock(
+            id="workflow_results_header",
+            type=MarkdownUiBlockType.MARKDOWN,
+            value="## Pipeline Runs"
+        )
+    ])
+
+    # Add each run as a markdown block with a button
+    for i, run in enumerate(runs[:20]):  # Limit to 20 runs
+        workflow_id = run.get('workflowId', '')
+        run_name = run.get('runName', 'Unknown')
+        project_name = run.get('projectName', 'Unknown')
+        status = run.get('status', 'Unknown')
+        start_time = run.get('startTime', 'Unknown')
+        user_name = run.get('userName', 'Unknown')
+        labels = run.get('labels', '')
+
+        # Create run info
+        run_info = f"**Run name: {run_name}**\n\n_Pipeline: {project_name}_\n\nLaunched by: {user_name}\n\n**Status: {status}** (started: {start_time})"
+
+        # Add labels if present
+        if labels:
+            run_info += f"\n\nLabels: {labels}"
+
+        canvas_builder.blocks.append([
+            MarkdownUiBlock(
+                id=f"run_info_{i}",
+                type=MarkdownUiBlockType.MARKDOWN,
+                value=run_info
+            )
+        ])
+
+        # Add button with workflow ID encoded in button ID
+        canvas_builder.blocks.append([
+            ButtonUiBlock(
+                id=f"{GET_PIPELINE_RUN_BUTTON_ID}_{workflow_id}",
+                type=ButtonUiBlockType.BUTTON,
+                text="View Details"
+            )
+        ])
+
+    # Add a Cancel button at the end
+    canvas_builder.blocks.append([
+        ButtonUiBlock(
+            id=CANCEL_DETAIL_BUTTON_ID,
+            type=ButtonUiBlockType.BUTTON,
+            text="Cancel"
+        )
+    ])
+
+    return canvas_builder
 
 
 def render_preview_canvas(
@@ -37,7 +108,7 @@ def render_preview_canvas(
         # Add the result to the canvas as data that won't be shown to the user but can be retrieved later
         canvas_builder = canvas_builder\
             .with_blocks(_preview_blocks(chemical))\
-            .with_data({CID_KEY: chemical["cid"]})\
+            .with_data({WID_KEY: chemical["cid"]})\
             .with_enabled()
         session.app.benchling.apps.update_canvas(
             canvas_id,
@@ -67,10 +138,10 @@ def _preview_blocks(chemical: dict[str, Any]) -> list[UiBlock]:
         MarkdownUiBlock(
             id="results",
             type=MarkdownUiBlockType.MARKDOWN,
-            value="We found the following chemical based on your search:",
+            value="We found the following runs based on your search:",
         ),
         MarkdownUiBlock(
-            id="chemical_preview",
+            id="run_preview",
             type=MarkdownUiBlockType.MARKDOWN,
             value=(
                 f"**Name**: {chemical['name']}\n\n**Structure**: {chemical['smiles']}"
@@ -84,7 +155,7 @@ def _preview_blocks(chemical: dict[str, Any]) -> list[UiBlock]:
         MarkdownUiBlock(
             id="user_prompt",
             type=MarkdownUiBlockType.MARKDOWN,
-            value="Would you like to create it in Benchling?",
+            value="Would you like to link it in Benchling?",
         ),
         SectionUiBlock(
             id="preview_buttons",
@@ -92,7 +163,7 @@ def _preview_blocks(chemical: dict[str, Any]) -> list[UiBlock]:
             children=[
                 ButtonUiBlock(
                     id=CREATE_BUTTON_ID,
-                    text="Create Molecule",
+                    text="Add run",
                     type=ButtonUiBlockType.BUTTON,
                 ),
                 ButtonUiBlock(

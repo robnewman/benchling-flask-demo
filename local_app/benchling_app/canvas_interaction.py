@@ -11,6 +11,10 @@ from benchling_sdk.models import (
     ButtonUiBlock,
     ButtonUiBlockType,
 )
+from local_app.benchling_app.views.canvas_initialize import input_blocks
+from local_app.benchling_app.views.run_preview import render_runs_list_canvas
+from local_app.benchling_app.views.completed import render_completed_canvas
+
 from benchling_sdk.models.webhooks.v0 import CanvasInteractionWebhookV2
 from local_app.lib.seqera_platform import (
     get_pipeline_runs,
@@ -100,7 +104,16 @@ def handle_get_workflows(
             # Fetch pipeline runs from Seqera with search filter
             runs = get_pipeline_runs(app, search_query=search_text)
 
+            # Debug: Log what we got back
+            import logging
+            logging.info(f"CANVAS_INTERACTION: Search query='{search_text}', runs type={type(runs)}, runs length={len(runs) if runs else 'None'}")
+            if runs:
+                logging.info(f"CANVAS_INTERACTION: First run = {runs[0] if len(runs) > 0 else 'empty list'}")
+
             if not runs:
+                # Debug: Confirm we're in the "no results" path
+                logging.info(f"CANVAS_INTERACTION: Entering 'no results' block for search_text='{search_text}'")
+
                 # Show warning message instead of error - don't block the user
                 canvas_builder = CanvasBuilder(
                     app_id=app.id,
@@ -116,65 +129,26 @@ def handle_get_workflows(
 
                 # Close with warning message
                 search_msg = f" for '{search_text}'" if search_text else ""
+                error_message = f"Couldn't find any pipeline runs{search_msg}"
+                logging.info(f"CANVAS_INTERACTION: About to close session with FAILED status and message: '{error_message}'")
                 session.close_session(
                     AppSessionUpdateStatus.FAILED,
                     messages=[
                         AppSessionMessageCreate(
-                            f"Couldn't find any pipeline runs{search_msg}",
+                            error_message,
                             style=AppSessionMessageStyle.ERROR,
                         ),
                     ],
                 )
+                logging.info(f"CANVAS_INTERACTION: Session closed, returning AppCanvasUpdate()")
                 return AppCanvasUpdate()
 
-            # Build updated canvas with list of runs and individual buttons
+            # Build updated canvas with list of runs using render function
             canvas_builder = CanvasBuilder(
                 app_id=app.id,
                 feature_id=canvas_interaction.feature_id
             )
-
-            # Add header
-            canvas_builder.blocks.append([
-                MarkdownUiBlock(
-                    id="workflow_results_header",
-                    type=MarkdownUiBlockType.MARKDOWN,
-                    value="## Pipeline Runs"
-                )
-            ])
-
-            # Add each run as a markdown block with a button
-            for i, run in enumerate(runs[:20]):  # Limit to 20 runs
-                workflow_id = run.get('workflowId', '')
-                run_name = run.get('runName', 'Unknown')
-                project_name = run.get('projectName', 'Unknown')
-                status = run.get('status', 'Unknown')
-                start_time = run.get('startTime', 'Unknown')
-                user_name = run.get('userName', 'Unknown')
-                labels = run.get('labels', '')
-
-                # Create run info
-                run_info = f"**Run name: {run_name}**\n\n_Pipeline: {project_name}_\n\nLaunched by: {user_name}\n\n**Status: {status}** (started: {start_time})"
-
-                # Add labels if present
-                if labels:
-                    run_info += f"\n\nLabels: {labels}"
-
-                canvas_builder.blocks.append([
-                    MarkdownUiBlock(
-                        id=f"run_info_{i}",
-                        type=MarkdownUiBlockType.MARKDOWN,
-                        value=run_info
-                    )
-                ])
-
-                # Add button with workflow ID encoded in button ID
-                canvas_builder.blocks.append([
-                    ButtonUiBlock(
-                        id=f"{GET_PIPELINE_RUN_BUTTON_ID}_{workflow_id}",
-                        type=ButtonUiBlockType.BUTTON,
-                        text="View Details"
-                    )
-                ])
+            canvas_builder = render_runs_list_canvas(runs, canvas_builder)
 
             # Update the canvas
             app.benchling.apps.update_canvas(

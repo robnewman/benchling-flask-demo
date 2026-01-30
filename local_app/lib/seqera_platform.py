@@ -137,9 +137,16 @@ def get_pipeline_runs(app: App, workspace_id: Optional[str] = None, search_query
         
         response = requests.get(url, headers=headers, params=params, timeout=10)
         response.raise_for_status()
-        
+
         # Parse the response
         data = response.json()
+
+        # Debug logging
+        import logging
+        logging.info(f"Seqera API search query: {search_query}")
+        logging.info(f"Seqera API response keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+        if isinstance(data, dict) and "workflows" in data:
+            logging.info(f"Number of workflows returned: {len(data['workflows'])}")
 
         # Extract workflow runs from response
         # The Seqera API returns a "workflows" array
@@ -147,6 +154,8 @@ def get_pipeline_runs(app: App, workspace_id: Optional[str] = None, search_query
             runs = data["workflows"]
         else:
             runs = data if isinstance(data, list) else []
+
+        logging.info(f"Total runs after extraction: {len(runs)}")
 
         # Transform to standard format
         pipeline_runs = []

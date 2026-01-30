@@ -28,7 +28,7 @@ def render_completed_canvas(
         messages=[
             AppSessionMessageCreate(
                 # ref() will turn supported objects into clickable "chips" in the Benchling UI
-                f"Created the molecule {ref(molecule)} in Benchling!",
+                f"Added the workflow run {ref(molecule)} in Benchling!",
                 style=AppSessionMessageStyle.SUCCESS,
             ),
         ],

@@ -13,3 +13,4 @@ WORKFLOW_DROPDOWN_ID = "workflow_dropdown"
 
 # Keys for canvas data
 WORKFLOW_ID_KEY = "workflow_id"
+WID_KEY = "wid"  # Workflow ID key for canvas data
