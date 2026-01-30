@@ -12,7 +12,7 @@ from benchling_sdk.models import (
     ButtonUiBlockType,
 )
 from local_app.benchling_app.views.canvas_initialize import input_blocks
-from local_app.benchling_app.views.run_preview import render_runs_list_canvas
+from local_app.benchling_app.views.run_preview import render_preview_canvas
 from local_app.benchling_app.views.completed import render_completed_canvas
 
 from benchling_sdk.models.webhooks.v0 import CanvasInteractionWebhookV2
@@ -26,6 +26,7 @@ from local_app.benchling_app.views.constants import (
     WORKFLOW_DROPDOWN_ID,
     ADD_TO_NOTEBOOK_BUTTON_ID,
     CANCEL_DETAIL_BUTTON_ID,
+    CANCEL_BUTTON_ID,
     SEARCH_TEXT_ID
 )
 
@@ -55,8 +56,12 @@ def route_interaction_webhook(
     if canvas_interaction.button_id and canvas_interaction.button_id.startswith(ADD_TO_NOTEBOOK_BUTTON_ID + "_"):
         return handle_add_to_notebook(app, canvas_interaction)
 
-    # Handle cancel button to return to landing page
+    # Handle cancel button to return to landing page (from detail view)
     if canvas_interaction.button_id == CANCEL_DETAIL_BUTTON_ID:
+        return handle_cancel_detail(app, canvas_interaction)
+
+    # Handle cancel button from runs list (format: "cancel_button_{i}")
+    if canvas_interaction.button_id and canvas_interaction.button_id.startswith(CANCEL_BUTTON_ID + "_"):
         return handle_cancel_detail(app, canvas_interaction)
 
     # Handle dropdown selections
@@ -148,13 +153,7 @@ def handle_get_workflows(
                 app_id=app.id,
                 feature_id=canvas_interaction.feature_id
             )
-            canvas_builder = render_runs_list_canvas(runs, canvas_builder)
-
-            # Update the canvas
-            app.benchling.apps.update_canvas(
-                canvas_id,
-                canvas_builder.to_update()
-            )
+            render_preview_canvas(runs, canvas_id, canvas_builder, session, search_text)
 
             # Close session with success message
             search_msg = f" matching '{search_text}'" if search_text else ""
