@@ -215,20 +215,24 @@ def handle_get_pipeline_run(
                 )
             ])
 
-            # Add action buttons with workflow ID encoded
+            # Add action buttons side by side using SectionUiBlock
+            from benchling_sdk.models import SectionUiBlock, SectionUiBlockType
             canvas_builder.blocks.append([
-                ButtonUiBlock(
-                    id=f"{ADD_TO_NOTEBOOK_BUTTON_ID}_{workflow_id}",
-                    type=ButtonUiBlockType.BUTTON,
-                    text="Add to notebook"
-                )
-            ])
-
-            canvas_builder.blocks.append([
-                ButtonUiBlock(
-                    id=CANCEL_DETAIL_BUTTON_ID,
-                    type=ButtonUiBlockType.BUTTON,
-                    text="Cancel"
+                SectionUiBlock(
+                    id="detail_buttons",
+                    type=SectionUiBlockType.SECTION,
+                    children=[
+                        ButtonUiBlock(
+                            id=f"{ADD_TO_NOTEBOOK_BUTTON_ID}_{workflow_id}",
+                            type=ButtonUiBlockType.BUTTON,
+                            text="Add to notebook"
+                        ),
+                        ButtonUiBlock(
+                            id=CANCEL_DETAIL_BUTTON_ID,
+                            type=ButtonUiBlockType.BUTTON,
+                            text="Cancel"
+                        )
+                    ]
                 )
             ])
 
