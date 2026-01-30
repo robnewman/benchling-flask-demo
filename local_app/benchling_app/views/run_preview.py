@@ -19,6 +19,9 @@ from local_app.benchling_app.views.canvas_initialize import input_blocks
 from local_app.benchling_app.views.constants import (
     CANCEL_BUTTON_ID,
     GET_PIPELINE_RUN_BUTTON_ID,
+    SEARCH_TEXT_ID,
+    WORKFLOW_ID_KEY,
+    WID_KEY
 )
 
 
@@ -27,8 +30,8 @@ def render_preview_canvas(
     canvas_id: str,
     canvas_builder: CanvasBuilder,
     session: SessionContextManager,
-    search_text: str = "",
-) -> None:
+    search_text: str = ""
+) -> bool:
     """
     Render pipeline runs list with error handling.
 
@@ -38,32 +41,34 @@ def render_preview_canvas(
         canvas_builder: CanvasBuilder instance
         session: Session context manager for status messages
         search_text: The search query used (for error messages)
+
+    Returns:
+        True if runs were displayed successfully, False if no runs found
     """
-    if runs:
+    if runs and len(runs) > 0:
         # Display the list of runs
         canvas_builder = canvas_builder\
             .with_blocks(_runs_list_blocks(runs))\
+            .with_data({SEARCH_TEXT_ID: search_text})\
             .with_enabled()
         session.app.benchling.apps.update_canvas(
             canvas_id,
             canvas_builder.to_update(),
         )
+        return True
     else:
-        # Clear the search input and re-enable canvas so user can input a new search
-        canvas_builder = canvas_builder.with_blocks(input_blocks()).with_enabled()
-        session.app.benchling.apps.update_canvas(
-            canvas_id,
-            canvas_builder.to_update(),
-        )
+        # Don't update canvas - just close session with info message
+        # The canvas will remain in its current state (search form)
         session.close_session(
-            AppSessionUpdateStatus.FAILED,
+            AppSessionUpdateStatus.SUCCEEDED,
             messages=[
                 AppSessionMessageCreate(
-                    f"Couldn't find any pipeline runs for '{search_text}'",
-                    style=AppSessionMessageStyle.ERROR,
+                    f"Couldn't find any runs for '{search_text}'",
+                    style=AppSessionMessageStyle.INFO,
                 ),
             ],
         )
+        return False
 
 
 def _runs_list_blocks(runs: list[dict[str, Any]]) -> list[UiBlock]:

@@ -1,6 +1,9 @@
 """
 Canvas interaction handlers for Seqera Platform integration
 """
+import re
+from urllib.parse import quote
+
 from benchling_sdk.apps.canvas.framework import CanvasBuilder
 from benchling_sdk.apps.framework import App
 from benchling_sdk.apps.status.errors import AppUserFacingError
@@ -23,11 +26,12 @@ from local_app.lib.seqera_platform import (
 from local_app.benchling_app.views.constants import (
     GET_WORKFLOWS_BUTTON_ID,
     GET_PIPELINE_RUN_BUTTON_ID,
-    WORKFLOW_DROPDOWN_ID,
     ADD_TO_NOTEBOOK_BUTTON_ID,
     CANCEL_DETAIL_BUTTON_ID,
     CANCEL_BUTTON_ID,
-    SEARCH_TEXT_ID
+    SEARCH_TEXT_ID,
+    WID_KEY,
+    WORKFLOW_ID_KEY
 )
 
 
@@ -64,10 +68,6 @@ def route_interaction_webhook(
     if canvas_interaction.button_id and canvas_interaction.button_id.startswith(CANCEL_BUTTON_ID + "_"):
         return handle_cancel_detail(app, canvas_interaction)
 
-    # Handle dropdown selections
-    if canvas_interaction.triggering_field_id == WORKFLOW_DROPDOWN_ID:
-        return handle_workflow_selection(app, canvas_interaction)
-
     # No handler found, return empty update
     return AppCanvasUpdate()
 
@@ -98,9 +98,10 @@ def handle_get_workflows(
             current_canvas = app.benchling.apps.get_canvas_by_id(canvas_id)
             canvas_builder_temp = CanvasBuilder.from_canvas(current_canvas)
             canvas_inputs = canvas_builder_temp.inputs_to_dict_single_value()
+            sanitized_inputs = _validate_and_sanitize_inputs(canvas_inputs)
 
             # Get search text if provided
-            search_text = canvas_inputs.get(SEARCH_TEXT_ID, "").strip()
+            search_text = sanitized_inputs[SEARCH_TEXT_ID]
 
             # Validate that search text is provided
             if not search_text:
@@ -109,63 +110,27 @@ def handle_get_workflows(
             # Fetch pipeline runs from Seqera with search filter
             runs = get_pipeline_runs(app, search_query=search_text)
 
-            # Debug: Log what we got back
-            import logging
-            logging.info(f"CANVAS_INTERACTION: Search query='{search_text}', runs type={type(runs)}, runs length={len(runs) if runs else 'None'}")
-            if runs:
-                logging.info(f"CANVAS_INTERACTION: First run = {runs[0] if len(runs) > 0 else 'empty list'}")
-
-            if not runs:
-                # Debug: Confirm we're in the "no results" path
-                logging.info(f"CANVAS_INTERACTION: Entering 'no results' block for search_text='{search_text}'")
-
-                # Show warning message instead of error - don't block the user
-                canvas_builder = CanvasBuilder(
-                    app_id=app.id,
-                    feature_id=canvas_interaction.feature_id
-                )
-
-                # Keep the input blocks visible
-                from local_app.benchling_app.views.canvas_initialize import input_blocks
-                canvas_builder.blocks.append(input_blocks())
-
-                # Update canvas
-                app.benchling.apps.update_canvas(canvas_id, canvas_builder.to_update())
-
-                # Close with warning message
-                search_msg = f" for '{search_text}'" if search_text else ""
-                error_message = f"Couldn't find any pipeline runs{search_msg}"
-                logging.info(f"CANVAS_INTERACTION: About to close session with FAILED status and message: '{error_message}'")
-                session.close_session(
-                    AppSessionUpdateStatus.FAILED,
-                    messages=[
-                        AppSessionMessageCreate(
-                            error_message,
-                            style=AppSessionMessageStyle.ERROR,
-                        ),
-                    ],
-                )
-                logging.info(f"CANVAS_INTERACTION: Session closed, returning AppCanvasUpdate()")
-                return AppCanvasUpdate()
-
-            # Build updated canvas with list of runs using render function
+            # Build canvas and render runs (or error if no runs found)
             canvas_builder = CanvasBuilder(
                 app_id=app.id,
                 feature_id=canvas_interaction.feature_id
             )
-            render_preview_canvas(runs, canvas_id, canvas_builder, session, search_text)
 
-            # Close session with success message
-            search_msg = f" matching '{search_text}'" if search_text else ""
-            session.close_session(
-                AppSessionUpdateStatus.SUCCEEDED,
-                messages=[
-                    AppSessionMessageCreate(
-                        f"Found {len(runs)} pipeline run(s){search_msg}",
-                        style=AppSessionMessageStyle.SUCCESS,
-                    ),
-                ],
-            )
+            success = render_preview_canvas(runs, canvas_id, canvas_builder, session, search_text)
+
+            # Close session with success message only if runs were found
+            # Note: render_preview_canvas handles closing session with info message if no runs
+            if success:
+                search_msg = f" matching '{search_text}'" if search_text else ""
+                session.close_session(
+                    AppSessionUpdateStatus.SUCCEEDED,
+                    messages=[
+                        AppSessionMessageCreate(
+                            f"Found {len(runs)} pipeline run(s){search_msg}",
+                            style=AppSessionMessageStyle.SUCCESS,
+                        ),
+                    ],
+                )
 
         except AppUserFacingError:
             raise
@@ -501,3 +466,15 @@ def handle_workflow_selection(
         raise
     except Exception as e:
         raise AppUserFacingError(f"Error loading workflow details: {str(e)}")
+    
+
+def _validate_and_sanitize_inputs(inputs: dict[str, str]) -> dict[str, str]:
+    sanitized_inputs = {}
+    if not inputs[SEARCH_TEXT_ID]:
+        # AppFacingUserError is a special error that will propagate the error message as-is back to the user
+        # via the App's session and end control flow
+        raise AppUserFacingError("Please enter a workflow name to search for")
+    if not re.match("^[a-zA-Z\\d\\s\\-]+$", inputs[SEARCH_TEXT_ID]):
+        raise AppUserFacingError("The workflow name can only contain letters, numbers, spaces, and hyphens")
+    sanitized_inputs[SEARCH_TEXT_ID] = quote(inputs[SEARCH_TEXT_ID])
+    return sanitized_inputs

@@ -9,8 +9,7 @@ CANCEL_DETAIL_BUTTON_ID = "cancel_detail_button"
 
 # Inputs we want to gather data from, submitted by the user
 SEARCH_TEXT_ID = "search_text"
-WORKFLOW_DROPDOWN_ID = "workflow_dropdown"
 
 # Keys for canvas data
 WORKFLOW_ID_KEY = "workflow_id"
-WID_KEY = "wid"  # Workflow ID key for canvas data
+WID_KEY = "workflow_wid"  # Workflow ID key for canvas data
