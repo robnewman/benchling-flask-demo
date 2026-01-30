@@ -110,13 +110,8 @@ def handle_get_workflows(
             # Fetch pipeline runs from Seqera with search filter
             runs = get_pipeline_runs(app, search_query=search_text)
 
-            # Build canvas and render runs (or error if no runs found)
-            canvas_builder = CanvasBuilder(
-                app_id=app.id,
-                feature_id=canvas_interaction.feature_id
-            )
-
-            success = render_preview_canvas(runs, canvas_id, canvas_builder, session, search_text)
+            # Use the canvas builder from current canvas (so it has input values for error messages)
+            success = render_preview_canvas(runs, canvas_id, canvas_builder_temp, session, search_text)
 
             # Close session with success message only if runs were found
             # Note: render_preview_canvas handles closing session with info message if no runs

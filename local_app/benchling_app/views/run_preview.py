@@ -57,8 +57,12 @@ def render_preview_canvas(
         )
         return True
     else:
-        # Don't update canvas - just close session with info message
-        # The canvas will remain in its current state (search form)
+        # Clear the search input and re-enable canvas so user can input a new search
+        canvas_builder = canvas_builder.with_blocks(input_blocks()).with_enabled()
+        session.app.benchling.apps.update_canvas(
+            canvas_id,
+            canvas_builder.to_update(),
+        )
         session.close_session(
             AppSessionUpdateStatus.SUCCEEDED,
             messages=[
