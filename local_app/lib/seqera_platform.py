@@ -82,30 +82,31 @@ def get_org_and_workspace_ids(app: App, organization_name: str, workspace_name: 
         raise AppUserFacingError(f"Failed to fetch organization and workspace IDs: {str(e)}")
 
 
-def get_pipeline_runs(app: App, workspace_id: Optional[str] = None) -> list[dict]:
+def get_pipeline_runs(app: App, workspace_id: Optional[str] = None, search_query: Optional[str] = None) -> list[dict]:
     """
     Fetch pipeline runs from Seqera Platform API.
-    
+
     Args:
         app: Benchling App instance
         workspace_id: Optional workspace ID to filter runs
-        
+        search_query: Optional search query to filter runs
+
     Returns:
         List of pipeline run dictionaries with 'id', 'runName', 'workflowId', 'status'
     """
     seqera_endpoint, seqera_token, organization_name, workspace_name, nxf_xpack_license = get_seqera_config(app)
-    
+
     if not seqera_endpoint or not seqera_token:
         raise AppUserFacingError(
             "Seqera Platform configuration is missing. Please configure 'seqeraApiEndpoint' and 'seqeraPlatformToken' in app settings."
         )
-    
+
     # Note: nxf_xpack_license available for future use if needed
-    
+
     try:
         # Construct the API URL
         url = f"{seqera_endpoint.rstrip('/')}/workflow"
-        
+
         # Resolve workspace ID if not provided
         if not workspace_id and organization_name and workspace_name:
             org_id, workspace_id = get_org_and_workspace_ids(app, organization_name, workspace_name)
@@ -114,10 +115,19 @@ def get_pipeline_runs(app: App, workspace_id: Optional[str] = None) -> list[dict
                     f"Could not find workspace '{workspace_name}' in organization '{organization_name}'"
                 )
 
-        # Add workspace filter if available
-        params = {}
+        # Add parameters for performance and filtering
+        params = {
+            "offset": 0,
+            "max": 25,
+            "attributes": "labels,minimal",
+            "includeTotalSize": "false"
+        }
+
         if workspace_id:
             params["workspaceId"] = workspace_id
+
+        if search_query:
+            params["search"] = search_query
         
         # Make the API request
         headers = {
@@ -142,6 +152,19 @@ def get_pipeline_runs(app: App, workspace_id: Optional[str] = None) -> list[dict
         pipeline_runs = []
         for run in runs:
             workflow = run.get("workflow", {})
+
+            # Extract and format labels, filtering out "owner" and "workspace"
+            labels_array = workflow.get("labels", [])
+            filtered_labels = []
+            if isinstance(labels_array, list):
+                for label in labels_array:
+                    label_name = label.get("name", "")
+                    if label_name not in ["owner", "workspace"]:
+                        label_value = label.get("value", "")
+                        filtered_labels.append(f"{label_name}:{label_value}")
+
+            labels_string = ", ".join(filtered_labels) if filtered_labels else ""
+
             # Extract fields from the workflow object
             pipeline_runs.append({
                 "id": workflow.get("id", ""),
@@ -151,7 +174,7 @@ def get_pipeline_runs(app: App, workspace_id: Optional[str] = None) -> list[dict
                 "projectName": workflow.get("projectName", ""),
                 "startTime": workflow.get("start", ""),
                 "userName": workflow.get("userName", workflow.get("owner", {}).get("userName", "")),
-                "labels": run.get("labels", ""),
+                "labels": labels_string,
             })
 
         return pipeline_runs
@@ -190,31 +213,58 @@ def format_pipeline_runs_for_dropdown(pipeline_runs: list[dict]) -> list[dict]:
 def get_pipeline_run_details(app: App, run_id: str) -> Optional[dict]:
     """
     Fetch detailed information about a specific pipeline run.
-    
+
     Args:
         app: Benchling App instance
         run_id: Pipeline run ID
-        
+
     Returns:
         Dictionary with pipeline run details or None if not found
     """
-    seqera_endpoint, seqera_token, _, _, _ = get_seqera_config(app)
-    
+    seqera_endpoint, seqera_token, organization_name, workspace_name, _ = get_seqera_config(app)
+
     if not seqera_endpoint or not seqera_token:
         return None
-    
+
     try:
+        # Resolve workspace ID
+        workspace_id = None
+        if organization_name and workspace_name:
+            org_id, workspace_id = get_org_and_workspace_ids(app, organization_name, workspace_name)
+            if not workspace_id:
+                raise AppUserFacingError(
+                    f"Could not find workspace '{workspace_name}' in organization '{organization_name}'"
+                )
+
         url = f"{seqera_endpoint.rstrip('/')}/workflow/{run_id}"
-        
+
         headers = {
             "Authorization": f"Bearer {seqera_token}",
             "Accept": "application/json"
         }
-        
-        response = requests.get(url, headers=headers, timeout=10)
+
+        # Add workspace parameter if available
+        params = {}
+        if workspace_id:
+            params["workspaceId"] = workspace_id
+
+        response = requests.get(url, headers=headers, params=params, timeout=10)
         response.raise_for_status()
-        
-        return response.json()
-        
+
+        data = response.json()
+
+        # Debug: Log the top-level keys to understand structure
+        import logging
+        logging.info(f"Pipeline run details response keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+
+        # The response might have the workflow nested inside a "workflow" key
+        # Try to extract it, otherwise return as-is
+        if isinstance(data, dict) and "workflow" in data:
+            workflow_data = data["workflow"]
+            logging.info(f"Found nested workflow, keys: {list(workflow_data.keys())}")
+            return workflow_data
+
+        return data
+
     except requests.exceptions.RequestException as e:
         raise AppUserFacingError(f"Failed to fetch pipeline run details: {str(e)}")

@@ -19,7 +19,10 @@ from local_app.lib.seqera_platform import (
 from local_app.benchling_app.views.constants import (
     GET_WORKFLOWS_BUTTON_ID,
     GET_PIPELINE_RUN_BUTTON_ID,
-    WORKFLOW_DROPDOWN_ID
+    WORKFLOW_DROPDOWN_ID,
+    ADD_TO_NOTEBOOK_BUTTON_ID,
+    CANCEL_DETAIL_BUTTON_ID,
+    SEARCH_TEXT_ID
 )
 
 
@@ -44,6 +47,14 @@ def route_interaction_webhook(
     if canvas_interaction.button_id and canvas_interaction.button_id.startswith(GET_PIPELINE_RUN_BUTTON_ID + "_"):
         return handle_get_pipeline_run(app, canvas_interaction)
 
+    # Check if it's add to notebook button (format: "add_to_notebook_button_{workflowId}")
+    if canvas_interaction.button_id and canvas_interaction.button_id.startswith(ADD_TO_NOTEBOOK_BUTTON_ID + "_"):
+        return handle_add_to_notebook(app, canvas_interaction)
+
+    # Handle cancel button to return to landing page
+    if canvas_interaction.button_id == CANCEL_DETAIL_BUTTON_ID:
+        return handle_cancel_detail(app, canvas_interaction)
+
     # Handle dropdown selections
     if canvas_interaction.triggering_field_id == WORKFLOW_DROPDOWN_ID:
         return handle_workflow_selection(app, canvas_interaction)
@@ -66,71 +77,129 @@ def handle_get_workflows(
     Returns:
         AppCanvasUpdate with updated canvas showing pipeline runs
     """
-    try:
-        # Fetch pipeline runs from Seqera
-        runs = get_pipeline_runs(app)
+    canvas_id = canvas_interaction.canvas_id
 
-        if not runs:
-            raise AppUserFacingError(
-                "No pipeline runs found or unable to connect to Seqera Platform."
+    with app.create_session_context("Search Pipeline Runs", timeout_seconds=20) as session:
+        session.attach_canvas(canvas_id)
+
+        try:
+            from benchling_sdk.models import AppSessionMessageCreate, AppSessionMessageStyle, AppSessionUpdateStatus
+
+            # Extract input values from canvas by fetching the current canvas state
+            current_canvas = app.benchling.apps.get_canvas_by_id(canvas_id)
+            canvas_builder_temp = CanvasBuilder.from_canvas(current_canvas)
+            canvas_inputs = canvas_builder_temp.inputs_to_dict_single_value()
+
+            # Get search text if provided
+            search_text = canvas_inputs.get(SEARCH_TEXT_ID, "").strip()
+
+            # Validate that search text is provided
+            if not search_text:
+                raise AppUserFacingError("Please enter a pipeline name to search for")
+
+            # Fetch pipeline runs from Seqera with search filter
+            runs = get_pipeline_runs(app, search_query=search_text)
+
+            if not runs:
+                # Show warning message instead of error - don't block the user
+                canvas_builder = CanvasBuilder(
+                    app_id=app.id,
+                    feature_id=canvas_interaction.feature_id
+                )
+
+                # Keep the input blocks visible
+                from local_app.benchling_app.views.canvas_initialize import input_blocks
+                canvas_builder.blocks.append(input_blocks())
+
+                # Update canvas
+                app.benchling.apps.update_canvas(canvas_id, canvas_builder.to_update())
+
+                # Close with warning message
+                search_msg = f" for '{search_text}'" if search_text else ""
+                session.close_session(
+                    AppSessionUpdateStatus.FAILED,
+                    messages=[
+                        AppSessionMessageCreate(
+                            f"Couldn't find any pipeline runs{search_msg}",
+                            style=AppSessionMessageStyle.ERROR,
+                        ),
+                    ],
+                )
+                return AppCanvasUpdate()
+
+            # Build updated canvas with list of runs and individual buttons
+            canvas_builder = CanvasBuilder(
+                app_id=app.id,
+                feature_id=canvas_interaction.feature_id
             )
 
-        # Build updated canvas with list of runs and individual buttons
-        canvas_builder = CanvasBuilder(
-            app_id=app.id,
-            feature_id=canvas_interaction.feature_id
-        )
-
-        # Add header
-        canvas_builder.blocks.append([
-            MarkdownUiBlock(
-                id="workflow_results_header",
-                type=MarkdownUiBlockType.MARKDOWN,
-                value="## Pipeline Runs"
-            )
-        ])
-
-        # Add each run as a markdown block with a button
-        for i, run in enumerate(runs[:20]):  # Limit to 20 runs
-            workflow_id = run.get('workflowId', '')
-            run_name = run.get('runName', 'Unknown')
-            project_name = run.get('projectName', 'Unknown')
-            status = run.get('status', 'Unknown')
-            start_time = run.get('startTime', 'Unknown')
-            user_name = run.get('userName', 'Unknown')
-
-            # Create run info
-            run_info = f"**{run_name}** [{project_name}]  \nStatus: {status} | Started: {start_time} | Owner: {user_name}"
-
+            # Add header
             canvas_builder.blocks.append([
                 MarkdownUiBlock(
-                    id=f"run_info_{i}",
+                    id="workflow_results_header",
                     type=MarkdownUiBlockType.MARKDOWN,
-                    value=run_info
+                    value="## Pipeline Runs"
                 )
             ])
 
-            # Add button with workflow ID encoded in button ID
-            canvas_builder.blocks.append([
-                ButtonUiBlock(
-                    id=f"{GET_PIPELINE_RUN_BUTTON_ID}_{workflow_id}",
-                    type=ButtonUiBlockType.BUTTON,
-                    text="View Details"
-                )
-            ])
+            # Add each run as a markdown block with a button
+            for i, run in enumerate(runs[:20]):  # Limit to 20 runs
+                workflow_id = run.get('workflowId', '')
+                run_name = run.get('runName', 'Unknown')
+                project_name = run.get('projectName', 'Unknown')
+                status = run.get('status', 'Unknown')
+                start_time = run.get('startTime', 'Unknown')
+                user_name = run.get('userName', 'Unknown')
+                labels = run.get('labels', '')
 
-        # Update the canvas
-        app.benchling.apps.update_canvas(
-            canvas_interaction.canvas_id,
-            canvas_builder.to_update()
-        )
+                # Create run info
+                run_info = f"**Run name: {run_name}**\n\n_Pipeline: {project_name}_\n\nLaunched by: {user_name}\n\n**Status: {status}** (started: {start_time})"
 
-        return AppCanvasUpdate()
+                # Add labels if present
+                if labels:
+                    run_info += f"\n\nLabels: {labels}"
 
-    except AppUserFacingError:
-        raise
-    except Exception as e:
-        raise AppUserFacingError(f"Error fetching workflows: {str(e)}")
+                canvas_builder.blocks.append([
+                    MarkdownUiBlock(
+                        id=f"run_info_{i}",
+                        type=MarkdownUiBlockType.MARKDOWN,
+                        value=run_info
+                    )
+                ])
+
+                # Add button with workflow ID encoded in button ID
+                canvas_builder.blocks.append([
+                    ButtonUiBlock(
+                        id=f"{GET_PIPELINE_RUN_BUTTON_ID}_{workflow_id}",
+                        type=ButtonUiBlockType.BUTTON,
+                        text="View Details"
+                    )
+                ])
+
+            # Update the canvas
+            app.benchling.apps.update_canvas(
+                canvas_id,
+                canvas_builder.to_update()
+            )
+
+            # Close session with success message
+            search_msg = f" matching '{search_text}'" if search_text else ""
+            session.close_session(
+                AppSessionUpdateStatus.SUCCEEDED,
+                messages=[
+                    AppSessionMessageCreate(
+                        f"Found {len(runs)} pipeline run(s){search_msg}",
+                        style=AppSessionMessageStyle.SUCCESS,
+                    ),
+                ],
+            )
+
+        except AppUserFacingError:
+            raise
+        except Exception as e:
+            raise AppUserFacingError(f"Error fetching workflows: {str(e)}")
+
+    return AppCanvasUpdate()
 
 
 def handle_get_pipeline_run(
@@ -147,63 +216,282 @@ def handle_get_pipeline_run(
     Returns:
         AppCanvasUpdate with pipeline run details
     """
-    try:
-        # Extract workflow ID from button ID (format: "get_pipeline_run_button_{workflowId}")
-        button_id = canvas_interaction.button_id
-        if not button_id or not button_id.startswith(GET_PIPELINE_RUN_BUTTON_ID + "_"):
-            raise AppUserFacingError("Invalid button ID format")
+    canvas_id = canvas_interaction.canvas_id
 
-        # Extract the workflow ID part after the button prefix and underscore
-        workflow_id = button_id[len(GET_PIPELINE_RUN_BUTTON_ID) + 1:]
+    with app.create_session_context("Load Pipeline Run Details", timeout_seconds=20) as session:
+        session.attach_canvas(canvas_id)
 
-        if not workflow_id:
-            raise AppUserFacingError("Could not extract workflow ID from button")
+        try:
+            from benchling_sdk.models import AppSessionMessageCreate, AppSessionMessageStyle, AppSessionUpdateStatus
 
-        # Fetch detailed information about the workflow
-        workflow_details = get_pipeline_run_details(app, workflow_id)
+            # Extract workflow ID from button ID (format: "get_pipeline_run_button_{workflowId}")
+            button_id = canvas_interaction.button_id
+            if not button_id or not button_id.startswith(GET_PIPELINE_RUN_BUTTON_ID + "_"):
+                raise AppUserFacingError("Invalid button ID format")
 
-        if not workflow_details:
-            raise AppUserFacingError(f"Could not find workflow: {workflow_id}")
+            # Extract the workflow ID part after the button prefix and underscore
+            workflow_id = button_id[len(GET_PIPELINE_RUN_BUTTON_ID) + 1:]
 
-        # Format the details as markdown
-        details_md = f"""## Pipeline Run Details
+            if not workflow_id:
+                raise AppUserFacingError("Could not extract workflow ID from button")
 
-**Run Name:** {workflow_details.get('runName', 'N/A')}
-**Workflow ID:** {workflow_details.get('id', 'N/A')}
-**Status:** {workflow_details.get('status', 'N/A')}
-**Project:** {workflow_details.get('projectName', 'N/A')}
-**Start Time:** {workflow_details.get('start', 'N/A')}
-**Complete Time:** {workflow_details.get('complete', 'N/A')}
-**Duration:** {workflow_details.get('duration', 'N/A')}
-**Owner:** {workflow_details.get('userName', 'N/A')}
+            # Fetch detailed information about the workflow
+            workflow_details = get_pipeline_run_details(app, workflow_id)
+
+            if not workflow_details:
+                raise AppUserFacingError(f"Could not find workflow: {workflow_id}")
+
+            # Extract and format labels
+            labels_array = workflow_details.get('labels', [])
+            filtered_labels = []
+            if isinstance(labels_array, list):
+                for label in labels_array:
+                    label_name = label.get("name", "")
+                    if label_name not in ["owner", "workspace"]:
+                        label_value = label.get("value", "")
+                        filtered_labels.append(f"{label_name}:{label_value}")
+
+            labels_string = ", ".join(filtered_labels) if filtered_labels else "None"
+
+            # Format the details as markdown
+            details_md = f"""## Pipeline Run Details\n
+---\n
+**Run Name:** {workflow_details.get('runName', 'N/A')}\n\n
+**Workflow ID:** {workflow_details.get('id', 'N/A')}\n\n
+**Pipeline:** {workflow_details.get('projectName', 'N/A')}\n
+---\n
+**Start Time:** {workflow_details.get('start', 'N/A')}\n\n
+**Complete Time:** {workflow_details.get('complete', 'N/A')}\n\n
+**Duration:** {workflow_details.get('duration', 'N/A')}\n\n
+**Launched by:** {workflow_details.get('userName', 'N/A')}\n\n
+**Status:** {workflow_details.get('status', 'N/A')}\n\n
+**Labels:** {labels_string}\n\n
 """
 
-        # Build updated canvas with details
-        canvas_builder = CanvasBuilder(
-            app_id=app.id,
-            feature_id=canvas_interaction.feature_id
-        )
-
-        canvas_builder.blocks.append([
-            MarkdownUiBlock(
-                id="pipeline_run_details",
-                type=MarkdownUiBlockType.MARKDOWN,
-                value=details_md
+            # Build updated canvas with details
+            canvas_builder = CanvasBuilder(
+                app_id=app.id,
+                feature_id=canvas_interaction.feature_id
             )
-        ])
 
-        # Update the canvas
-        app.benchling.apps.update_canvas(
-            canvas_interaction.canvas_id,
-            canvas_builder.to_update()
-        )
+            canvas_builder.blocks.append([
+                MarkdownUiBlock(
+                    id="pipeline_run_details",
+                    type=MarkdownUiBlockType.MARKDOWN,
+                    value=details_md
+                )
+            ])
 
-        return AppCanvasUpdate()
+            # Add action buttons with workflow ID encoded
+            canvas_builder.blocks.append([
+                ButtonUiBlock(
+                    id=f"{ADD_TO_NOTEBOOK_BUTTON_ID}_{workflow_id}",
+                    type=ButtonUiBlockType.BUTTON,
+                    text="Add to notebook"
+                )
+            ])
 
-    except AppUserFacingError:
-        raise
-    except Exception as e:
-        raise AppUserFacingError(f"Error fetching pipeline run details: {str(e)}")
+            canvas_builder.blocks.append([
+                ButtonUiBlock(
+                    id=CANCEL_DETAIL_BUTTON_ID,
+                    type=ButtonUiBlockType.BUTTON,
+                    text="Cancel"
+                )
+            ])
+
+            # Update the canvas
+            app.benchling.apps.update_canvas(
+                canvas_id,
+                canvas_builder.to_update()
+            )
+
+            # Close session with success message
+            run_name = workflow_details.get('runName', 'pipeline run')
+            session.close_session(
+                AppSessionUpdateStatus.SUCCEEDED,
+                messages=[
+                    AppSessionMessageCreate(
+                        f"Loaded details for {run_name}",
+                        style=AppSessionMessageStyle.SUCCESS,
+                    ),
+                ],
+            )
+
+        except AppUserFacingError:
+            raise
+        except Exception as e:
+            raise AppUserFacingError(f"Error fetching pipeline run details: {str(e)}")
+
+    return AppCanvasUpdate()
+
+
+def handle_cancel_detail(
+    app: App, canvas_interaction: CanvasInteractionWebhookV2
+) -> AppCanvasUpdate:
+    """
+    Handle cancel button click - return to the landing page.
+
+    Args:
+        app: Benchling App instance
+        canvas_interaction: The canvas interaction webhook event
+
+    Returns:
+        AppCanvasUpdate with landing page
+    """
+    from local_app.benchling_app.views.canvas_initialize import input_blocks
+
+    canvas_builder = CanvasBuilder(
+        app_id=app.id,
+        feature_id=canvas_interaction.feature_id
+    )
+
+    canvas_builder.blocks.append(input_blocks())
+
+    # Update the canvas
+    app.benchling.apps.update_canvas(
+        canvas_interaction.canvas_id,
+        canvas_builder.to_update()
+    )
+
+    return AppCanvasUpdate()
+
+
+def handle_add_to_notebook(
+    app: App, canvas_interaction: CanvasInteractionWebhookV2
+) -> AppCanvasUpdate:
+    """
+    Handle 'Add to notebook' button click - sync workflow run to Benchling.
+
+    Args:
+        app: Benchling App instance
+        canvas_interaction: The canvas interaction webhook event
+
+    Returns:
+        AppCanvasUpdate with success message
+    """
+    canvas_id = canvas_interaction.canvas_id
+
+    with app.create_session_context("Add Workflow to Notebook", timeout_seconds=20) as session:
+        session.attach_canvas(canvas_id)
+
+        try:
+            # Extract workflow ID from button ID (format: "add_to_notebook_button_{workflowId}")
+            button_id = canvas_interaction.button_id
+            if not button_id or not button_id.startswith(ADD_TO_NOTEBOOK_BUTTON_ID + "_"):
+                raise AppUserFacingError("Invalid button ID format")
+
+            workflow_id = button_id[len(ADD_TO_NOTEBOOK_BUTTON_ID) + 1:]
+
+            if not workflow_id:
+                raise AppUserFacingError("Could not extract workflow ID from button")
+
+            # Fetch workflow details
+            workflow_details = get_pipeline_run_details(app, workflow_id)
+
+            if not workflow_details:
+                raise AppUserFacingError(f"Could not find workflow: {workflow_id}")
+
+            # Get configuration
+            workflow_schema_id = app.config_store.config_by_path(["workflowSchema"]).value()
+            sync_folder_id = app.config_store.config_by_path(["syncFolder"]).value()
+
+            if not workflow_schema_id or not sync_folder_id:
+                raise AppUserFacingError(
+                    "Missing configuration: workflowSchema or syncFolder not configured"
+                )
+
+            # Extract and format labels
+            labels_array = workflow_details.get('labels', [])
+            filtered_labels = []
+            if isinstance(labels_array, list):
+                for label in labels_array:
+                    label_name = label.get("name", "")
+                    if label_name not in ["owner", "workspace"]:
+                        label_value = label.get("value", "")
+                        filtered_labels.append(f"{label_name}:{label_value}")
+
+            labels_string = ", ".join(filtered_labels) if filtered_labels else ""
+
+            # Create entry in Benchling
+            from benchling_sdk.models import (
+                EntryCreate,
+                AppSessionMessageCreate,
+                AppSessionMessageStyle,
+                AppSessionUpdateStatus
+            )
+            from benchling_sdk.apps.status.helpers import ref
+
+            entry_name = workflow_details.get('runName', 'Unknown Run')
+
+            entry = EntryCreate(
+                name=entry_name,
+                schema_id=workflow_schema_id,
+                folder_id=sync_folder_id,
+                fields={
+                    "workflowId": {"value": workflow_details.get('id', '')},
+                    "runName": {"value": workflow_details.get('runName', '')},
+                    "status": {"value": workflow_details.get('status', '')},
+                    "projectName": {"value": workflow_details.get('projectName', '')},
+                    "startTime": {"value": workflow_details.get('start', '')},
+                    "ownerId": {"value": workflow_details.get('userName', '')},
+                    "labels": {"value": labels_string}
+                }
+            )
+
+            created_entry = app.benchling.entries.create(entry)
+
+            # Show success message
+            canvas_builder = CanvasBuilder(
+                app_id=app.id,
+                feature_id=canvas_interaction.feature_id
+            )
+
+            success_msg = f"""## Success!
+
+Workflow run **{entry_name}** has been added to your notebook.
+
+**Entry ID:** {created_entry.id}
+"""
+
+            canvas_builder.blocks.append([
+                MarkdownUiBlock(
+                    id="success_message",
+                    type=MarkdownUiBlockType.MARKDOWN,
+                    value=success_msg
+                )
+            ])
+
+            canvas_builder.blocks.append([
+                ButtonUiBlock(
+                    id=GET_WORKFLOWS_BUTTON_ID,
+                    type=ButtonUiBlockType.BUTTON,
+                    text="Search more runs"
+                )
+            ])
+
+            # Update the canvas
+            app.benchling.apps.update_canvas(
+                canvas_id,
+                canvas_builder.to_update()
+            )
+
+            # Close session with success message using ref() for clickable entry chip
+            session.close_session(
+                AppSessionUpdateStatus.SUCCEEDED,
+                messages=[
+                    AppSessionMessageCreate(
+                        f"Created workflow entry {ref(created_entry)} in Benchling!",
+                        style=AppSessionMessageStyle.SUCCESS,
+                    ),
+                ],
+            )
+
+        except AppUserFacingError:
+            raise
+        except Exception as e:
+            raise AppUserFacingError(f"Error adding workflow to notebook: {str(e)}")
+
+    return AppCanvasUpdate()
 
 
 def handle_workflow_selection(
