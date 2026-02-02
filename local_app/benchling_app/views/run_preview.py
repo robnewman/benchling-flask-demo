@@ -96,7 +96,7 @@ def _runs_list_blocks(runs: list[dict[str, Any]]) -> list[UiBlock]:
         labels = run.get('labels', '')
 
         # Create run info
-        run_info = f"**Run name: {run_name}**\n\n_Pipeline: {project_name}_\n\nLaunched by: {user_name}\n\n**Status: {status}** (started: {start_time})"
+        run_info = f"**![Icon](https://github.com/adam-p/markdown-here/raw/master/src/common/images/icon48.png) Run name: {run_name}**\n\n_Pipeline: {project_name}_\n\nLaunched by: {user_name}\n\n**Status: {status}** (started: {start_time})"
 
         # Add labels if present
         if labels:
