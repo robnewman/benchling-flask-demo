@@ -186,18 +186,35 @@ def handle_get_pipeline_run(
 
             labels_string = ", ".join(filtered_labels) if filtered_labels else "None"
 
+            status = workflow_details.get('status')
+            # Create run info with status-specific emoji
+            status_lower = status.lower()
+            status_emoji_map = {
+                'pending': '🕐',      # Clock icon (orange/red)
+                'submitted': '⏳',     # Three horizontal dots (orange)
+                'running': '⚙️',      # Blue circle for running (animated progress)
+                'cached': '🔄',       # Recycle icon (gray)
+                'succeeded': '✅',    # Checkmark icon (green)
+                'failed': '❌',       # Warning icon (red)
+                'aborted': '⛔',      # Cross icon (brown)
+                'cancelled': '🚫'     # Stop icon (gray)
+            }
+
+            status_emoji = status_emoji_map.get(status_lower, '⚪')  # Default to white circle
+            status_display = f"{status_emoji} {status}"
+
             # Format the details as markdown
             details_md = f"""## Pipeline Run Details\n
 ---\n
 **Run Name:** {workflow_details.get('runName', 'N/A')}\n\n
-Status: ![Status icon](/static/images/pipeline-status-icons/icon-{workflow_details.get('status', 'N/A')}.png) {workflow_details.get('status', 'N/A')}\n\n
+Status: {status_display}\n\n
 Workflow ID: {workflow_details.get('id', 'N/A')}\n\n
 Pipeline: {workflow_details.get('projectName', 'N/A')}\n
-**Launched by:** {workflow_details.get('userName', 'N/A')}\n\n
-**Started:** {workflow_details.get('start', 'N/A')}\n\n
-**Completed:** {workflow_details.get('complete', 'N/A')}\n\n
-**Duration:** {workflow_details.get('duration', 'N/A')}\n\n
-**Labels:** {labels_string}\n\n
+Launched by: {workflow_details.get('userName', 'N/A')}\n\n
+Started: {workflow_details.get('start', 'N/A')}\n\n
+Completed: {workflow_details.get('complete', 'N/A')}\n\n
+Duration: {workflow_details.get('duration', 'N/A')}\n\n
+Labels: {labels_string}\n\n
 """
 
             # Build updated canvas with details

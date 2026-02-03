@@ -95,8 +95,23 @@ def _runs_list_blocks(runs: list[dict[str, Any]]) -> list[UiBlock]:
         user_name = run.get('userName', 'Unknown')
         labels = run.get('labels', '')
 
-        # Create run info
-        run_info = f"**Run name: {run_name}**\n\n_Pipeline: {project_name}_\n\nLaunched by: {user_name}\n\n**Status: ![{status} icon](/static/images/pipeline-status-icons/icon-{status}.png) {status} ** (started: {start_time})"
+        # Create run info with status-specific emoji
+        status_lower = status.lower()
+        status_emoji_map = {
+            'pending': '🕐',      # Clock icon (orange/red)
+            'submitted': '⏳',     # Three horizontal dots (orange)
+            'running': '⚙️',      # Blue circle for running (animated progress)
+            'cached': '🔄',       # Recycle icon (gray)
+            'succeeded': '✅',    # Checkmark icon (green)
+            'failed': '❌',       # Warning icon (red)
+            'aborted': '⛔',      # Cross icon (brown)
+            'cancelled': '🚫'     # Stop icon (gray)
+        }
+
+        status_emoji = status_emoji_map.get(status_lower, '⚪')  # Default to white circle
+        status_display = f"{status_emoji} {status}"
+
+        run_info = f"**Run name: {run_name}**\n\n_Pipeline: {project_name}_\n\nLaunched by: {user_name}\n\n**Status: {status_display}** (started: {start_time})"
 
         # Add labels if present
         if labels:
