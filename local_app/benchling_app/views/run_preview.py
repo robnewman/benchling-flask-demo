@@ -78,12 +78,19 @@ def render_preview_canvas(
 def _runs_list_blocks(runs: list[dict[str, Any]]) -> list[UiBlock]:
     """Generate UI blocks for displaying a list of pipeline runs."""
     blocks = [
+        ButtonUiBlock(
+            id=f"{CANCEL_BUTTON_ID}",
+            text="Back to Search",
+            type=ButtonUiBlockType.BUTTON,
+        )
+    ]
+    blocks.append(
         MarkdownUiBlock(
             id="workflow_results_header",
             type=MarkdownUiBlockType.MARKDOWN,
             value="## Pipeline Runs"
         )
-    ]
+    )
 
     # Add each run as a markdown block with buttons
     for i, run in enumerate(runs[:20]):  # Limit to 20 runs
@@ -127,21 +134,20 @@ def _runs_list_blocks(runs: list[dict[str, Any]]) -> list[UiBlock]:
 
         # Add button section with View Details and Cancel buttons
         blocks.append(
-            SectionUiBlock(
-                id=f"run_buttons_{i}",
-                type=SectionUiBlockType.SECTION,
-                children=[
-                    ButtonUiBlock(
-                        id=f"{GET_PIPELINE_RUN_BUTTON_ID}_{workflow_id}",
-                        type=ButtonUiBlockType.BUTTON,
-                        text="View run details"
-                    ),
-                    ButtonUiBlock(
-                        id=f"{CANCEL_BUTTON_ID}_{i}",
-                        text="Cancel",
-                        type=ButtonUiBlockType.BUTTON,
-                    )
-                ]
+            ButtonUiBlock(
+                id=f"{GET_PIPELINE_RUN_BUTTON_ID}_{workflow_id}",
+                type=ButtonUiBlockType.BUTTON,
+                text="Add to Notebook"
+
+            )
+        )
+
+        # Add horizontal rule divider
+        blocks.append(
+            MarkdownUiBlock(
+                id=f"breakpoint_{i}",
+                type=MarkdownUiBlockType.MARKDOWN,
+                value="\n---\n"
             )
         )
 

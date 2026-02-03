@@ -7,18 +7,25 @@ from urllib.parse import quote
 from benchling_sdk.apps.canvas.framework import CanvasBuilder
 from benchling_sdk.apps.framework import App
 from benchling_sdk.apps.status.errors import AppUserFacingError
+from benchling_sdk.apps.status.helpers import ref
+from benchling_sdk.models.webhooks.v0 import CanvasInteractionWebhookV2
 from benchling_sdk.models import (
     AppCanvasUpdate,
-    MarkdownUiBlock,
-    MarkdownUiBlockType,
+    AppSessionMessageCreate, 
+    AppSessionMessageStyle, 
+    AppSessionUpdateStatus,
     ButtonUiBlock,
     ButtonUiBlockType,
+    EntryCreate,
+    MarkdownUiBlock,
+    MarkdownUiBlockType,
+    SectionUiBlock, 
+    SectionUiBlockType
 )
 from local_app.benchling_app.views.canvas_initialize import input_blocks
 from local_app.benchling_app.views.run_preview import render_preview_canvas
 from local_app.benchling_app.views.completed import render_completed_canvas
 
-from benchling_sdk.models.webhooks.v0 import CanvasInteractionWebhookV2
 from local_app.lib.seqera_platform import (
     get_pipeline_runs,
     get_pipeline_run_details
@@ -92,7 +99,6 @@ def handle_get_workflows(
         session.attach_canvas(canvas_id)
 
         try:
-            from benchling_sdk.models import AppSessionMessageCreate, AppSessionMessageStyle, AppSessionUpdateStatus
 
             # Extract input values from canvas by fetching the current canvas state
             current_canvas = app.benchling.apps.get_canvas_by_id(canvas_id)
@@ -155,7 +161,6 @@ def handle_get_pipeline_run(
         session.attach_canvas(canvas_id)
 
         try:
-            from benchling_sdk.models import AppSessionMessageCreate, AppSessionMessageStyle, AppSessionUpdateStatus
 
             # Extract workflow ID from button ID (format: "get_pipeline_run_button_{workflowId}")
             button_id = canvas_interaction.button_id
@@ -205,7 +210,6 @@ def handle_get_pipeline_run(
 
             # Format the details as markdown
             details_md = f"""## Pipeline Run Details\n
----\n
 **Run Name:** {workflow_details.get('runName', 'N/A')}\n\n
 Status: {status_display}\n\n
 Workflow ID: {workflow_details.get('id', 'N/A')}\n\n
@@ -216,12 +220,32 @@ Completed: {workflow_details.get('complete', 'N/A')}\n\n
 Duration: {workflow_details.get('duration', 'N/A')}\n\n
 Labels: {labels_string}\n\n
 """
+            
+            links_md = f"""---\n
+## Configuration\n
+[Download config as JSON](link)\n
+---\n
+## Reports\n
+[Download all as zip archive](link)\n
+\n
+- Report 1 | [Open](link) | [Download](link)\n
+- Report 2 | [Open](link) | [Download](link)\n
+- Report 3 | [Open](link) | [Download](link)\n
+"""
 
             # Build updated canvas with details
             canvas_builder = CanvasBuilder(
                 app_id=app.id,
                 feature_id=canvas_interaction.feature_id
             )
+
+            canvas_builder.blocks.append([
+                ButtonUiBlock(
+                    id=CANCEL_DETAIL_BUTTON_ID,
+                    type=ButtonUiBlockType.BUTTON,
+                    text="Back to Search results"
+                        )
+            ])
 
             canvas_builder.blocks.append([
                 MarkdownUiBlock(
@@ -232,23 +256,19 @@ Labels: {labels_string}\n\n
             ])
 
             # Add action buttons side by side using SectionUiBlock
-            from benchling_sdk.models import SectionUiBlock, SectionUiBlockType
             canvas_builder.blocks.append([
-                SectionUiBlock(
-                    id="detail_buttons",
-                    type=SectionUiBlockType.SECTION,
-                    children=[
-                        ButtonUiBlock(
-                            id=f"{ADD_TO_NOTEBOOK_BUTTON_ID}_{workflow_id}",
-                            type=ButtonUiBlockType.BUTTON,
-                            text="Add to notebook"
-                        ),
-                        ButtonUiBlock(
-                            id=CANCEL_DETAIL_BUTTON_ID,
-                            type=ButtonUiBlockType.BUTTON,
-                            text="Cancel"
-                        )
-                    ]
+                ButtonUiBlock(
+                    id=f"{ADD_TO_NOTEBOOK_BUTTON_ID}_{workflow_id}",
+                    type=ButtonUiBlockType.BUTTON,
+                    text="Add to Notebook"
+                )
+            ])
+
+            canvas_builder.blocks.append([
+                MarkdownUiBlock(
+                    id="pipeline_links",
+                    type=MarkdownUiBlockType.MARKDOWN,
+                    value=links_md
                 )
             ])
 
@@ -366,13 +386,6 @@ def handle_add_to_notebook(
             labels_string = ", ".join(filtered_labels) if filtered_labels else ""
 
             # Create entry in Benchling
-            from benchling_sdk.models import (
-                EntryCreate,
-                AppSessionMessageCreate,
-                AppSessionMessageStyle,
-                AppSessionUpdateStatus
-            )
-            from benchling_sdk.apps.status.helpers import ref
 
             entry_name = workflow_details.get('runName', 'Unknown Run')
 
