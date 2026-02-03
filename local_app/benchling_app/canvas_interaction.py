@@ -330,8 +330,6 @@ def handle_cancel_detail(
     Returns:
         AppCanvasUpdate with search results or landing page
     """
-    from local_app.benchling_app.views.canvas_initialize import input_blocks
-
     canvas_id = canvas_interaction.canvas_id
 
     # Check if there's stored search_text in canvas data
@@ -402,8 +400,6 @@ def handle_cancel_to_landing(
     Returns:
         AppCanvasUpdate with landing page
     """
-    from local_app.benchling_app.views.canvas_initialize import input_blocks
-
     canvas_builder = CanvasBuilder(
         app_id=app.id,
         feature_id=canvas_interaction.feature_id

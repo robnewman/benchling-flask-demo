@@ -1,6 +1,7 @@
 """
 Functions for interacting with Seqera Platform API
 """
+import logging
 from typing import Optional
 
 import requests
@@ -142,7 +143,6 @@ def get_pipeline_runs(app: App, workspace_id: Optional[str] = None, search_query
         data = response.json()
 
         # Debug logging
-        import logging
         logging.info(f"Seqera API search query: {search_query}")
         logging.info(f"Seqera API response keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
         if isinstance(data, dict) and "workflows" in data:
@@ -263,7 +263,6 @@ def get_pipeline_run_details(app: App, run_id: str) -> Optional[dict]:
         data = response.json()
 
         # Debug: Log the top-level keys to understand structure
-        import logging
         logging.info(f"Pipeline run details response keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
 
         # The response might have the workflow nested inside a "workflow" key
