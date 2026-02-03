@@ -67,17 +67,17 @@ def route_interaction_webhook(
     if canvas_interaction.button_id and canvas_interaction.button_id.startswith(ADD_TO_NOTEBOOK_BUTTON_ID + "_"):
         return handle_add_to_notebook(app, canvas_interaction)
 
-    # Handle cancel button to return to landing page (from detail view)
+    # Handle cancel button from detail view - return to search results
     if canvas_interaction.button_id == CANCEL_DETAIL_BUTTON_ID:
         return handle_cancel_detail(app, canvas_interaction)
 
-    # Handle cancel button from runs list (exact match or with index)
+    # Handle cancel button from runs list - return to landing page
     if canvas_interaction.button_id == CANCEL_BUTTON_ID:
-        return handle_cancel_detail(app, canvas_interaction)
+        return handle_cancel_to_landing(app, canvas_interaction)
 
     # Handle cancel button from runs list (format: "cancel_button_{i}")
     if canvas_interaction.button_id and canvas_interaction.button_id.startswith(CANCEL_BUTTON_ID + "_"):
-        return handle_cancel_detail(app, canvas_interaction)
+        return handle_cancel_to_landing(app, canvas_interaction)
 
     # No handler found, return empty update
     return AppCanvasUpdate()
@@ -237,11 +237,26 @@ Labels: {labels_string}\n\n
 - Report 3 | [Open](link) | [Download](link)\n
 """
 
+            # Get current canvas to preserve search_text
+            current_canvas = app.benchling.apps.get_canvas_by_id(canvas_id)
+            # Canvas data is stored as a dict-like object
+            stored_search_text = ""
+            if hasattr(current_canvas, 'data') and current_canvas.data:
+                if isinstance(current_canvas.data, dict):
+                    stored_search_text = current_canvas.data.get(SEARCH_TEXT_ID, "")
+                elif isinstance(current_canvas.data, str):
+                    # If it's a string, it might be the search text directly
+                    stored_search_text = current_canvas.data
+
             # Build updated canvas with details
             canvas_builder = CanvasBuilder(
                 app_id=app.id,
                 feature_id=canvas_interaction.feature_id
             )
+
+            # Preserve the search_text so we can return to results
+            if stored_search_text:
+                canvas_builder = canvas_builder.with_data({SEARCH_TEXT_ID: stored_search_text})
 
             canvas_builder.blocks.append([
                 ButtonUiBlock(
@@ -306,7 +321,79 @@ def handle_cancel_detail(
     app: App, canvas_interaction: CanvasInteractionWebhookV2
 ) -> AppCanvasUpdate:
     """
-    Handle cancel button click - return to the landing page.
+    Handle cancel button click - return to search results if available, otherwise landing page.
+
+    Args:
+        app: Benchling App instance
+        canvas_interaction: The canvas interaction webhook event
+
+    Returns:
+        AppCanvasUpdate with search results or landing page
+    """
+    from local_app.benchling_app.views.canvas_initialize import input_blocks
+
+    canvas_id = canvas_interaction.canvas_id
+
+    # Check if there's stored search_text in canvas data
+    current_canvas = app.benchling.apps.get_canvas_by_id(canvas_id)
+    stored_search_text = ""
+    if hasattr(current_canvas, 'data') and current_canvas.data:
+        if isinstance(current_canvas.data, dict):
+            stored_search_text = current_canvas.data.get(SEARCH_TEXT_ID, "")
+        elif isinstance(current_canvas.data, str):
+            # If it's a string, it might be the search text directly
+            stored_search_text = current_canvas.data
+    canvas_builder_temp = CanvasBuilder.from_canvas(current_canvas)
+
+    if stored_search_text:
+        # Return to search results
+        with app.create_session_context("Back to Search Results", timeout_seconds=20) as session:
+            session.attach_canvas(canvas_id)
+
+            try:
+                # Re-fetch the pipeline runs
+                runs = get_pipeline_runs(app, search_query=stored_search_text)
+
+                # Display the search results
+                success = render_preview_canvas(runs, canvas_id, canvas_builder_temp, session, stored_search_text)
+
+                # Close session with success message only if runs were found
+                if success:
+                    session.close_session(
+                        AppSessionUpdateStatus.SUCCEEDED,
+                        messages=[
+                            AppSessionMessageCreate(
+                                f"Showing {len(runs)} pipeline run(s) matching '{stored_search_text}'",
+                                style=AppSessionMessageStyle.SUCCESS,
+                            ),
+                        ],
+                    )
+
+            except Exception as e:
+                raise AppUserFacingError(f"Error returning to search results: {str(e)}")
+    else:
+        # No stored search, return to landing page
+        canvas_builder = CanvasBuilder(
+            app_id=app.id,
+            feature_id=canvas_interaction.feature_id
+        )
+
+        canvas_builder.blocks.append(input_blocks())
+
+        # Update the canvas
+        app.benchling.apps.update_canvas(
+            canvas_id,
+            canvas_builder.to_update()
+        )
+
+    return AppCanvasUpdate()
+
+
+def handle_cancel_to_landing(
+    app: App, canvas_interaction: CanvasInteractionWebhookV2
+) -> AppCanvasUpdate:
+    """
+    Handle cancel button from runs list - return to the landing page.
 
     Args:
         app: Benchling App instance
