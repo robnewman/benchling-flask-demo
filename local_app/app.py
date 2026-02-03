@@ -1,4 +1,5 @@
 from threading import Thread
+import os
 
 from benchling_sdk.apps.helpers.webhook_helpers import verify
 from flask import Flask, request
@@ -15,7 +16,9 @@ logger = get_logger()
 load_dotenv()
 
 def create_app() -> Flask:
-    app = Flask("seqera-integration-app")
+    # Configure static folder path
+    static_folder = os.path.join(os.path.dirname(__file__), 'static')
+    app = Flask("seqera-integration-app", static_folder=static_folder, static_url_path='/static')
 
     @app.route("/health")
     def health_check() -> tuple[str, int]:

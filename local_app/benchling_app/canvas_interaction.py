@@ -190,14 +190,13 @@ def handle_get_pipeline_run(
             details_md = f"""## Pipeline Run Details\n
 ---\n
 **Run Name:** {workflow_details.get('runName', 'N/A')}\n\n
-**Workflow ID:** {workflow_details.get('id', 'N/A')}\n\n
-**Pipeline:** {workflow_details.get('projectName', 'N/A')}\n
----\n
-**Start Time:** {workflow_details.get('start', 'N/A')}\n\n
-**Complete Time:** {workflow_details.get('complete', 'N/A')}\n\n
-**Duration:** {workflow_details.get('duration', 'N/A')}\n\n
+Status: ![Status icon](/static/images/pipeline-status-icons/icon-{workflow_details.get('status', 'N/A')}.png) {workflow_details.get('status', 'N/A')}\n\n
+Workflow ID: {workflow_details.get('id', 'N/A')}\n\n
+Pipeline: {workflow_details.get('projectName', 'N/A')}\n
 **Launched by:** {workflow_details.get('userName', 'N/A')}\n\n
-**Status:** {workflow_details.get('status', 'N/A')}\n\n
+**Started:** {workflow_details.get('start', 'N/A')}\n\n
+**Completed:** {workflow_details.get('complete', 'N/A')}\n\n
+**Duration:** {workflow_details.get('duration', 'N/A')}\n\n
 **Labels:** {labels_string}\n\n
 """
 
