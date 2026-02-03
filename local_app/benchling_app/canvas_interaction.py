@@ -71,6 +71,10 @@ def route_interaction_webhook(
     if canvas_interaction.button_id == CANCEL_DETAIL_BUTTON_ID:
         return handle_cancel_detail(app, canvas_interaction)
 
+    # Handle cancel button from runs list (exact match or with index)
+    if canvas_interaction.button_id == CANCEL_BUTTON_ID:
+        return handle_cancel_detail(app, canvas_interaction)
+
     # Handle cancel button from runs list (format: "cancel_button_{i}")
     if canvas_interaction.button_id and canvas_interaction.button_id.startswith(CANCEL_BUTTON_ID + "_"):
         return handle_cancel_detail(app, canvas_interaction)
