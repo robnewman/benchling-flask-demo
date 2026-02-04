@@ -4,7 +4,7 @@ A Benchling Canvas App that integrates with Seqera Platform, allowing users to s
 
 ## Overview
 
-This application provides a seamless bridge between Benchling and Seqera Platform (formerly Nextflow Tower). Users can:
+This application provides a seamless bridge between Benchling and Seqera Platform. Users can:
 - Search for pipeline runs by name or keyword
 - View detailed run information including status, timestamps, and labels
 - Add run details to Benchling notebooks for documentation
@@ -96,11 +96,19 @@ Create a `.env` file in the project root:
 BENCHLING_APP_DEFINITION_ID=appdef_your_app_id
 BENCHLING_CLIENT_ID=your_client_id
 BENCHLING_CLIENT_SECRET=your_client_secret
+BENCHLING_TENANT=your_benchling_tenant
+BENCHLING_APP_LOG_LEVEL=debug_level
 ```
 
 4. **Run the application**
 ```bash
 python3 -m gunicorn local_app.app:app --bind 0.0.0.0:8080
+```
+
+or
+
+```bash
+gunicorn local_app.app:app --bind 0.0.0.0:8080
 ```
 
 Or for development with auto-reload:
@@ -152,6 +160,8 @@ docker run -p 8080:8080 \
   -e BENCHLING_APP_DEFINITION_ID="your_app_def_id" \
   -e BENCHLING_CLIENT_ID="your_client_id" \
   -e BENCHLING_CLIENT_SECRET="your_client_secret" \
+  -e BENCHLING_TENANT="your_benchling_tenant" \
+  -e BENCHLING_APP_LOG_LEVEL="DEBUG" \
   seqera-benchling-app
 ```
 
@@ -188,6 +198,8 @@ In App Runner console under Configuration → Environment variables:
 BENCHLING_APP_DEFINITION_ID=appdef_your_app_id
 BENCHLING_CLIENT_ID=your_client_id
 BENCHLING_CLIENT_SECRET=your_client_secret
+BENCHLING_TENANT=your_benchling_tenant
+BENCHLING_APP_LOG_LEVEL=debug_level
 ```
 
 ⚠️ **Security Note**: Never commit sensitive credentials to version control. Always set them as environment variables in the App Runner console.
@@ -317,7 +329,7 @@ Contributions are welcome! Please:
 
 ## License
 
-(Add your license here)
+[MIT](LICENSE)
 
 ## Support
 
