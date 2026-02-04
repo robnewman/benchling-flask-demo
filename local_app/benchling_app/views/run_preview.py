@@ -93,7 +93,7 @@ def _runs_list_blocks(runs: list[dict[str, Any]]) -> list[UiBlock]:
     )
 
     # Add each run as a markdown block with buttons
-    for i, run in enumerate(runs[:20]):  # Limit to 20 runs
+    for i, run in enumerate(runs):
         workflow_id = run.get('workflowId', '')
         run_name = run.get('runName', 'Unknown')
         project_name = run.get('projectName', 'Unknown')
