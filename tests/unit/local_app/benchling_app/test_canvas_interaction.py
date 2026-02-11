@@ -110,6 +110,104 @@ class TestHandleGetWorkflows:
         assert result is not None
 
 
+class TestHandleGetPipelineRun:
+    """Tests for handle_get_pipeline_run function."""
+
+    @patch("local_app.benchling_app.canvas_interaction.get_pipeline_run_details")
+    @patch("local_app.benchling_app.canvas_interaction.CanvasBuilder")
+    def test_handle_get_pipeline_run_uploads_config(
+        self, mock_builder, mock_get_details, mock_app, mock_canvas_interaction
+    ):
+        """Test that pipeline params are uploaded as a JSON blob."""
+        mock_canvas_interaction.button_id = "get_pipeline_run_button_abc123"
+        mock_get_details.return_value = {
+            "id": "abc123",
+            "runName": "test_run",
+            "status": "succeeded",
+            "projectName": "nf-core/rnaseq",
+            "start": "2024-01-01",
+            "complete": "2024-01-02",
+            "duration": "1h",
+            "userName": "user1",
+            "labels": [],
+            "params": {"input": "s3://bucket/data", "outdir": "s3://bucket/results"},
+        }
+
+        mock_blob = MagicMock()
+        mock_blob.id = "blob_123"
+        mock_app.benchling.blobs.create_from_bytes.return_value = mock_blob
+
+        mock_blob_url = MagicMock()
+        mock_blob_url.download_url = "https://benchling.com/blobs/blob_123/download"
+        mock_app.benchling.blobs.download_url.return_value = mock_blob_url
+
+        mock_canvas_builder = MagicMock()
+        mock_builder.return_value = mock_canvas_builder
+
+        handle_get_pipeline_run(mock_app, mock_canvas_interaction)
+
+        mock_app.benchling.blobs.create_from_bytes.assert_called_once()
+        call_args = mock_app.benchling.blobs.create_from_bytes.call_args
+        assert call_args.kwargs["name"] == "abc123.json"
+        assert call_args.kwargs["mime_type"] == "application/json"
+        mock_app.benchling.blobs.download_url.assert_called_once_with("blob_123")
+
+    @patch("local_app.benchling_app.canvas_interaction.get_pipeline_run_details")
+    @patch("local_app.benchling_app.canvas_interaction.CanvasBuilder")
+    def test_handle_get_pipeline_run_no_params(
+        self, mock_builder, mock_get_details, mock_app, mock_canvas_interaction
+    ):
+        """Test that no blob upload occurs when params is empty."""
+        mock_canvas_interaction.button_id = "get_pipeline_run_button_abc123"
+        mock_get_details.return_value = {
+            "id": "abc123",
+            "runName": "test_run",
+            "status": "succeeded",
+            "projectName": "nf-core/rnaseq",
+            "start": "2024-01-01",
+            "complete": "2024-01-02",
+            "duration": "1h",
+            "userName": "user1",
+            "labels": [],
+        }
+
+        mock_canvas_builder = MagicMock()
+        mock_builder.return_value = mock_canvas_builder
+
+        handle_get_pipeline_run(mock_app, mock_canvas_interaction)
+
+        mock_app.benchling.blobs.create_from_bytes.assert_not_called()
+
+    @patch("local_app.benchling_app.canvas_interaction.get_pipeline_run_details")
+    @patch("local_app.benchling_app.canvas_interaction.CanvasBuilder")
+    def test_handle_get_pipeline_run_blob_upload_failure(
+        self, mock_builder, mock_get_details, mock_app, mock_canvas_interaction
+    ):
+        """Test that blob upload failure doesn't crash the detail view."""
+        mock_canvas_interaction.button_id = "get_pipeline_run_button_abc123"
+        mock_get_details.return_value = {
+            "id": "abc123",
+            "runName": "test_run",
+            "status": "succeeded",
+            "projectName": "nf-core/rnaseq",
+            "start": "2024-01-01",
+            "complete": "2024-01-02",
+            "duration": "1h",
+            "userName": "user1",
+            "labels": [],
+            "params": {"input": "s3://bucket/data"},
+        }
+
+        mock_app.benchling.blobs.create_from_bytes.side_effect = Exception("Upload failed")
+
+        mock_canvas_builder = MagicMock()
+        mock_builder.return_value = mock_canvas_builder
+
+        # Should not raise - blob upload failure is handled gracefully
+        result = handle_get_pipeline_run(mock_app, mock_canvas_interaction)
+        assert result is not None
+
+
 class TestHandleCancelToLanding:
     """Tests for handle_cancel_to_landing function."""
 

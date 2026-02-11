@@ -1,6 +1,8 @@
 """
 Canvas interaction handlers for Seqera Platform integration
 """
+import io
+import json
 import re
 from urllib.parse import quote
 
@@ -225,9 +227,28 @@ Duration: {workflow_details.get('duration', 'N/A')}\n\n
 Labels: {labels_string}\n\n
 """
             
+            # Upload pipeline config params as a JSON file to Benchling
+            config_link_md = "No configuration available"
+            params = workflow_details.get('params', {})
+            if params:
+                try:
+                    config_json = json.dumps(params, indent=2)
+                    config_bytes = io.BytesIO(config_json.encode("utf-8"))
+                    config_filename = f"{workflow_id}.json"
+
+                    blob = app.benchling.blobs.create_from_bytes(
+                        config_bytes,
+                        name=config_filename,
+                        mime_type="application/json"
+                    )
+                    blob_url = app.benchling.blobs.download_url(blob.id)
+                    config_link_md = f"[📄 Download config as JSON]({blob_url.download_url})"
+                except Exception:
+                    config_link_md = "Error uploading configuration file"
+
             links_md = f"""---\n
 ## Configuration\n
-[Download config as JSON](link)\n
+{config_link_md}\n
 ---\n
 ## Reports\n
 [Download all as zip archive](link)\n
