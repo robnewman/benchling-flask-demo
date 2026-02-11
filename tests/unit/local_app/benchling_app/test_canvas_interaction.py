@@ -207,6 +207,79 @@ class TestHandleGetPipelineRun:
         result = handle_get_pipeline_run(mock_app, mock_canvas_interaction)
         assert result is not None
 
+    @patch("local_app.benchling_app.canvas_interaction.get_org_and_workspace_ids")
+    @patch("local_app.benchling_app.canvas_interaction.get_seqera_config")
+    @patch("local_app.benchling_app.canvas_interaction.download_workflow_report")
+    @patch("local_app.benchling_app.canvas_interaction.get_pipeline_run_details")
+    @patch("local_app.benchling_app.canvas_interaction.CanvasBuilder")
+    def test_handle_get_pipeline_run_uploads_reports(
+        self, mock_builder, mock_get_details, mock_download_report, mock_seqera_config, mock_ids, mock_app, mock_canvas_interaction
+    ):
+        """Test that each report is downloaded via Seqera content redirect API and uploaded as a blob."""
+        mock_canvas_interaction.button_id = "get_pipeline_run_button_abc123"
+        mock_get_details.return_value = {
+            "id": "abc123",
+            "runName": "test_run",
+            "status": "succeeded",
+            "projectName": "nf-core/rnaseq",
+            "start": "2024-01-01",
+            "complete": "2024-01-02",
+            "duration": "1h",
+            "userName": "user1",
+            "labels": [],
+            "reports": [
+                {
+                    "display": "Gene counts",
+                    "mimeType": "text/tab-separated-values",
+                    "path": "0/salmon.merged.gene_counts.tsv",
+                    "fileName": "salmon.merged.gene_counts.tsv",
+                    "externalPath": "s3://bucket/results/salmon.merged.gene_counts.tsv",
+                    "size": 3761,
+                },
+                {
+                    "display": "MultiQC Report",
+                    "mimeType": "text/html",
+                    "path": "1/multiqc_report.html",
+                    "fileName": "multiqc_report.html",
+                    "externalPath": "s3://bucket/results/multiqc_report.html",
+                    "size": 12345,
+                },
+            ],
+        }
+
+        # Mock workspace resolution (done once before report loop)
+        mock_seqera_config.return_value = ("https://api.seqera.io", "token", "org", "ws", None)
+        mock_ids.return_value = ("1", "10")
+
+        # Mock downloading report content via Seqera content redirect API
+        mock_download_report.return_value = b"report file content"
+
+        mock_blob = MagicMock()
+        mock_blob.id = "blob_456"
+        mock_app.benchling.blobs.create_from_bytes.return_value = mock_blob
+
+        mock_blob_url = MagicMock()
+        mock_blob_url.download_url = "https://benchling.com/blobs/blob_456/download"
+        mock_app.benchling.blobs.download_url.return_value = mock_blob_url
+
+        mock_canvas_builder = MagicMock()
+        mock_builder.return_value = mock_canvas_builder
+
+        handle_get_pipeline_run(mock_app, mock_canvas_interaction)
+
+        # Verify reports were downloaded via content redirect API with path and pre-resolved workspace_id
+        assert mock_download_report.call_count == 2
+        mock_download_report.assert_any_call(mock_app, "abc123", "0/salmon.merged.gene_counts.tsv", workspace_id="10")
+        mock_download_report.assert_any_call(mock_app, "abc123", "1/multiqc_report.html", workspace_id="10")
+
+        # Verify blobs uploaded with correct filenames and mime types
+        assert mock_app.benchling.blobs.create_from_bytes.call_count == 2
+        call_args_list = mock_app.benchling.blobs.create_from_bytes.call_args_list
+        assert call_args_list[0].kwargs["name"] == "salmon.merged.gene_counts.tsv"
+        assert call_args_list[0].kwargs["mime_type"] == "text/tab-separated-values"
+        assert call_args_list[1].kwargs["name"] == "multiqc_report.html"
+        assert call_args_list[1].kwargs["mime_type"] == "text/html"
+
 
 class TestHandleCancelToLanding:
     """Tests for handle_cancel_to_landing function."""

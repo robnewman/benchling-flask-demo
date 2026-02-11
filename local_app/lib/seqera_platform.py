@@ -3,7 +3,6 @@ Functions for interacting with Seqera Platform API
 """
 import logging
 from typing import Optional
-
 import requests
 from benchling_sdk.apps.framework import App
 from benchling_sdk.apps.status.errors import AppUserFacingError
@@ -270,9 +269,63 @@ def get_pipeline_run_details(app: App, run_id: str) -> Optional[dict]:
         if isinstance(data, dict) and "workflow" in data:
             workflow_data = data["workflow"]
             logging.info(f"Found nested workflow, keys: {list(workflow_data.keys())}")
-            return workflow_data
+        else:
+            workflow_data = data
 
-        return data
+        # Fetch reports for this workflow
+        try:
+            reports_url = f"{seqera_endpoint.rstrip('/')}/workflow/{run_id}/reports"
+            reports_response = requests.get(reports_url, headers=headers, params=params, timeout=10)
+            reports_response.raise_for_status()
+            reports_data = reports_response.json()
+            workflow_data["reports"] = reports_data.get("reports", reports_data)
+            logging.info(f"Fetched {len(workflow_data['reports'])} reports for workflow {run_id}")
+        except Exception as e:
+            logging.warning(f"Failed to fetch reports for workflow {run_id}: {e}")
+            workflow_data["reports"] = []
+
+        return workflow_data
 
     except requests.exceptions.RequestException as e:
         raise AppUserFacingError(f"Failed to fetch pipeline run details: {str(e)}")
+
+
+def download_workflow_report(app: App, workflow_id: str, report_path: str, workspace_id: Optional[str] = None) -> Optional[bytes]:
+    """
+    Download a workflow report file via the Seqera Platform content redirect endpoint.
+
+    Uses GET /content/redirect/reports/wsp/{workspaceId}/{workflowId}/{reportPath}
+    which returns a redirect to a presigned download URL.
+
+    Args:
+        app: Benchling App instance
+        workflow_id: The workflow run ID
+        report_path: The report's path field (e.g. "1/salmon.merged.gene_tpm.tsv")
+        workspace_id: Optional pre-resolved workspace ID to avoid redundant API calls
+
+    Returns:
+        Raw bytes of the report file, or None if download fails
+    """
+    seqera_endpoint, seqera_token, organization_name, workspace_name, _ = get_seqera_config(app)
+
+    if not seqera_endpoint or not seqera_token:
+        return None
+
+    # Resolve workspace ID if not provided
+    if not workspace_id:
+        if organization_name and workspace_name:
+            _, workspace_id = get_org_and_workspace_ids(app, organization_name, workspace_name)
+
+    if not workspace_id:
+        logging.warning("Could not resolve workspace ID for report download")
+        return None
+
+    headers = {
+        "Authorization": f"Bearer {seqera_token}",
+    }
+
+    url = f"{seqera_endpoint.rstrip('/')}/content/redirect/reports/wsp/{workspace_id}/{workflow_id}/{report_path}"
+    response = requests.get(url, headers=headers, timeout=30)
+    response.raise_for_status()
+
+    return response.content

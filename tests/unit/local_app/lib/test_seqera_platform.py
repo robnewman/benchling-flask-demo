@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from local_app.lib.seqera_platform import (
+    download_workflow_report,
     get_org_and_workspace_ids,
     get_pipeline_run_details,
     get_pipeline_runs,
@@ -205,22 +206,32 @@ class TestGetPipelineRunDetails:
         )
         mock_ids.return_value = ("1", "10")
 
-        mock_get.return_value.json.return_value = {
-            "workflow": {
-                "id": "123",
-                "runName": "test_run",
-                "projectName": "test_project",
-                "status": "SUCCEEDED",
-                "start": "2024-01-01T00:00:00Z",
-                "complete": "2024-01-01T01:00:00Z",
-                "duration": 3600000,
-                "userName": "test_user",
-                "labels": [
-                    {"name": "key1", "value": "value1"},
-                    {"name": "owner", "value": "test"}
+        mock_get.return_value.json.side_effect = [
+            # First call: workflow details
+            {
+                "workflow": {
+                    "id": "123",
+                    "runName": "test_run",
+                    "projectName": "test_project",
+                    "status": "SUCCEEDED",
+                    "start": "2024-01-01T00:00:00Z",
+                    "complete": "2024-01-01T01:00:00Z",
+                    "duration": 3600000,
+                    "userName": "test_user",
+                    "labels": [
+                        {"name": "key1", "value": "value1"},
+                        {"name": "owner", "value": "test"}
+                    ]
+                }
+            },
+            # Second call: reports
+            {
+                "reports": [
+                    {"display": "Execution Report", "mimeType": "text/html"},
+                    {"display": "Timeline Report", "mimeType": "text/html"}
                 ]
             }
-        }
+        ]
         mock_get.return_value.raise_for_status.return_value = None
 
         details = get_pipeline_run_details(mock_app, "123")
@@ -228,6 +239,8 @@ class TestGetPipelineRunDetails:
         assert details["id"] == "123"
         assert details["runName"] == "test_run"
         assert details["status"] == "SUCCEEDED"
+        assert len(details["reports"]) == 2
+        assert details["reports"][0]["display"] == "Execution Report"
 
     @patch("local_app.lib.seqera_platform.get_org_and_workspace_ids")
     @patch("local_app.lib.seqera_platform.get_seqera_config")
@@ -243,9 +256,73 @@ class TestGetPipelineRunDetails:
         )
         mock_ids.return_value = ("1", "10")
 
-        mock_get.return_value.json.return_value = {}
+        mock_get.return_value.json.side_effect = [
+            # First call: empty workflow response
+            {},
+            # Second call: reports (still attempted)
+            {"reports": []}
+        ]
         mock_get.return_value.raise_for_status.return_value = None
 
         details = get_pipeline_run_details(mock_app, "nonexistent")
 
-        assert details == {}
+        assert details.get("reports") == []
+
+
+class TestDownloadWorkflowReport:
+    """Tests for download_workflow_report function."""
+
+    @patch("local_app.lib.seqera_platform.get_org_and_workspace_ids")
+    @patch("local_app.lib.seqera_platform.get_seqera_config")
+    @patch("local_app.lib.seqera_platform.requests.get")
+    def test_download_workflow_report_success(self, mock_get, mock_config, mock_ids, mock_app):
+        """Test successfully downloading a report via content redirect endpoint."""
+        mock_config.return_value = (
+            "https://api.seqera.io",
+            "test_token",
+            "test_org",
+            "test_workspace",
+            "test_license"
+        )
+        mock_ids.return_value = ("1", "10")
+
+        mock_get.return_value.raise_for_status.return_value = None
+        mock_get.return_value.content = b"report file content"
+
+        content = download_workflow_report(
+            mock_app, "2pQ8hl45laOIwf", "1/salmon.merged.gene_tpm.tsv"
+        )
+
+        assert content == b"report file content"
+        # Verify the content redirect URL was called correctly
+        mock_get.assert_called_once_with(
+            "https://api.seqera.io/content/redirect/reports/wsp/10/2pQ8hl45laOIwf/1/salmon.merged.gene_tpm.tsv",
+            headers={"Authorization": "Bearer test_token"},
+            timeout=30
+        )
+
+    @patch("local_app.lib.seqera_platform.get_seqera_config")
+    def test_download_workflow_report_no_config(self, mock_config, mock_app):
+        """Test download returns None when config is missing."""
+        mock_config.return_value = (None, None, None, None, None)
+
+        result = download_workflow_report(mock_app, "wf123", "1/report.tsv")
+
+        assert result is None
+
+    @patch("local_app.lib.seqera_platform.get_org_and_workspace_ids")
+    @patch("local_app.lib.seqera_platform.get_seqera_config")
+    def test_download_workflow_report_no_workspace(self, mock_config, mock_ids, mock_app):
+        """Test download returns None when workspace ID cannot be resolved."""
+        mock_config.return_value = (
+            "https://api.seqera.io",
+            "test_token",
+            "test_org",
+            "test_workspace",
+            "test_license"
+        )
+        mock_ids.return_value = (None, None)
+
+        result = download_workflow_report(mock_app, "wf123", "1/report.tsv")
+
+        assert result is None

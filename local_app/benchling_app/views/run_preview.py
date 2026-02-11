@@ -137,8 +137,7 @@ def _runs_list_blocks(runs: list[dict[str, Any]]) -> list[UiBlock]:
             ButtonUiBlock(
                 id=f"{GET_PIPELINE_RUN_BUTTON_ID}_{workflow_id}",
                 type=ButtonUiBlockType.BUTTON,
-                text="Add to Notebook"
-
+                text="View Details"
             )
         )
 

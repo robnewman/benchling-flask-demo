@@ -6,6 +6,10 @@ import json
 import re
 from urllib.parse import quote
 
+from local_app.lib.logger import get_logger
+
+logger = get_logger()
+
 from benchling_sdk.apps.canvas.framework import CanvasBuilder
 from benchling_sdk.apps.framework import App
 from benchling_sdk.apps.status.errors import AppUserFacingError
@@ -29,8 +33,11 @@ from local_app.benchling_app.views.run_preview import render_preview_canvas
 from local_app.benchling_app.views.completed import render_completed_canvas
 
 from local_app.lib.seqera_platform import (
+    download_workflow_report,
+    get_org_and_workspace_ids,
     get_pipeline_runs,
-    get_pipeline_run_details
+    get_pipeline_run_details,
+    get_seqera_config
 )
 from local_app.benchling_app.views.constants import (
     GET_WORKFLOWS_BUTTON_ID,
@@ -163,7 +170,7 @@ def handle_get_pipeline_run(
     """
     canvas_id = canvas_interaction.canvas_id
 
-    with app.create_session_context("Load Pipeline Run Details", timeout_seconds=20) as session:
+    with app.create_session_context("Load Pipeline Run Details", timeout_seconds=60) as session:
         session.attach_canvas(canvas_id)
 
         try:
@@ -242,20 +249,58 @@ Labels: {labels_string}\n\n
                         mime_type="application/json"
                     )
                     blob_url = app.benchling.blobs.download_url(blob.id)
-                    config_link_md = f"[📄 Download config as JSON]({blob_url.download_url})"
-                except Exception:
-                    config_link_md = "Error uploading configuration file"
+                    config_link_md = f"- [📄 Download config as JSON]({blob_url.download_url})"
+                except Exception as e:
+                    logger.error(f"Failed to upload config for workflow {workflow_id}: {e}", exc_info=True)
+                    config_link_md = "- Error uploading configuration file"
+
+            # Resolve workspace ID once for all report downloads
+            reports = workflow_details.get('reports', [])
+            report_lines = []
+            resolved_workspace_id = None
+            if reports:
+                _, _, org_name, ws_name, _ = get_seqera_config(app)
+                if org_name and ws_name:
+                    _, resolved_workspace_id = get_org_and_workspace_ids(app, org_name, ws_name)
+
+            for report in reports:
+                report_name = report.get('display', report.get('fileName', 'Unknown report'))
+                report_path = report.get('path')
+                if not report_path:
+                    report_lines.append(f"- {report_name} | No report path available")
+                    continue
+                try:
+                    report_content = download_workflow_report(app, workflow_id, report_path, workspace_id=resolved_workspace_id)
+                    if not report_content:
+                        report_lines.append(f"- {report_name} | Download returned empty")
+                        continue
+
+                    report_bytes = io.BytesIO(report_content)
+                    report_filename = report.get('fileName', f"{workflow_id}_{report_name}")
+                    report_mime = report.get('mimeType', 'application/octet-stream')
+
+                    report_blob = app.benchling.blobs.create_from_bytes(
+                        report_bytes,
+                        name=report_filename,
+                        mime_type=report_mime
+                    )
+                    report_blob_url = app.benchling.blobs.download_url(report_blob.id)
+                    report_lines.append(
+                        f"- [📄 {report_name}]({report_blob_url.download_url})"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to upload report '{report_name}' for workflow {workflow_id}: {e}", exc_info=True)
+                    report_lines.append(f"- {report_name} | Error uploading")
+
+            reports_section = "\n".join(report_lines) if report_lines else "No reports available"
 
             links_md = f"""---\n
 ## Configuration\n
 {config_link_md}\n
 ---\n
 ## Reports\n
-[Download all as zip archive](link)\n
-\n
-- Report 1 | [Open](link) | [Download](link)\n
-- Report 2 | [Open](link) | [Download](link)\n
-- Report 3 | [Open](link) | [Download](link)\n
+Click the links below to download available reports for this pipeline run:\n
+{reports_section}\n
 """
 
             # Get current canvas to preserve search_text
