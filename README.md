@@ -17,6 +17,8 @@ The app uses Benchling's Canvas framework to provide an interactive UI within Be
 - **Pipeline Run Search**: Search across all accessible pipeline runs in your Seqera workspace
 - **Status Visualization**: Clear status indicators using emojis (✅ Succeeded, ⚙️ Running, ❌ Failed, etc.)
 - **Detailed Run Information**: View run names, projects, start times, duration, and custom labels
+- **Configuration Download**: Pipeline params automatically uploaded as a downloadable JSON blob
+- **Report Downloads**: Workflow reports fetched from Seqera and uploaded as downloadable Benchling blobs
 - **Notebook Integration**: Add run details directly to Benchling notebooks for record-keeping
 - **Real-time Updates**: Canvas interface updates dynamically as users interact
 
@@ -37,7 +39,7 @@ The app uses Benchling's Canvas framework to provide an interactive UI within Be
 │   │   ├── views/
 │   │   │   ├── canvas_initialize.py    # Landing page UI
 │   │   │   ├── run_preview.py          # Pipeline run list view
-│   │   │   ├── run_detail.py           # Detailed run information
+│   │   │   ├── completed.py            # Notebook entry success view
 │   │   │   └── constants.py            # UI element IDs
 │   │   ├── canvas_interaction.py       # Button click handlers
 │   │   ├── handler.py                  # Webhook routing
@@ -144,6 +146,8 @@ After creating your app in Benchling, configure the following settings in the Ap
 | `organizationName` | String | Your Seqera organization name |
 | `workspaceName` | String | Your Seqera workspace name |
 | `NXF_XPACK_LICENSE` | String | Nextflow XPack license key (if applicable) |
+| `workflowSchema` | String | Benchling entry schema ID for notebook entries |
+| `syncFolder` | String | Benchling folder ID where notebook entries are created |
 
 These values are configured per-tenant in the Benchling App's configuration interface and accessed via the `app.config_store` API.
 
@@ -216,10 +220,11 @@ BENCHLING_APP_LOG_LEVEL=debug_level
 
 ## Testing
 
-The app includes a comprehensive test suite with 26 tests covering:
-- Canvas interaction and routing (9 tests)
+The app includes a comprehensive test suite with 33 tests covering:
+- Canvas interaction and routing (13 tests)
 - UI rendering and block generation (9 tests)
-- Seqera Platform API integration (8 tests)
+- Seqera Platform API integration (10 tests)
+- App webhook handling (1 test)
 
 ### Run all tests
 ```bash
@@ -315,7 +320,7 @@ thread = Thread(target=handle_webhook, args=(request.json,))
 
 1. **Landing Page**: Search input and "Get Workflows" button
 2. **Results List**: Shows matching pipeline runs with status indicators
-3. **Run Detail**: Detailed information about a specific run
+3. **Run Detail**: Detailed information about a specific run, with downloadable config JSON and report files
 4. **Notebook Entry**: Formatted run details added to Benchling notebook
 
 ## Contributing
